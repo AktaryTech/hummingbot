@@ -102,11 +102,11 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
     @cachetools.func.ttl_cache(ttl=10)
     def get_mid_price(cls, trading_pair: str, domain=None) -> Optional[Decimal]:
         base_url: str = get_zebpay_rest_url(domain=domain)
-        ticker_url: str = f"{base_url}/v1/tickers?market={trading_pair}"        # change to Zebpay url
+        ticker_url: str = f"{base_url}/market/{trading_pair}/ticker"
         resp = requests.get(ticker_url)
         market = resp.json()
-        if market.get('bid') and market.get('ask'):
-            result = (Decimal(market['bid']) + Decimal(market['ask'])) / Decimal('2')
+        if market.get('buy') and market.get('sell'):
+            result = (Decimal(market['buy']) + Decimal(market['sell'])) / Decimal('2')
             return result
 
     @staticmethod
