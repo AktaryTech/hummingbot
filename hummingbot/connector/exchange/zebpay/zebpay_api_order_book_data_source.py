@@ -28,9 +28,9 @@ from hummingbot.core.data_type.order_book_tracker_data_source import OrderBookTr
 # import with change to get_last_traded_prices
 from hummingbot.core.utils.async_utils import safe_gather
 
-from hummingbot.connector.exchange.zebpay.zebpay_active_order_tracker import zebpayActiveOrderTracker
-from hummingbot.connector.exchange.zebpay.zebpay_order_book_tracker_entry import zebpayOrderBookTrackerEntry
-from hummingbot.connector.exchange.zebpay.zebpay_order_book import zebpayOrderBook
+from hummingbot.connector.exchange.zebpay.zebpay_active_order_tracker import ZebpayActiveOrderTracker
+from hummingbot.connector.exchange.zebpay.zebpay_order_book_tracker_entry import ZebpayOrderBookTrackerEntry
+from hummingbot.connector.exchange.zebpay.zebpay_order_book import ZebpayOrderBook
 from hummingbot.connector.exchange.zebpay.zebpay_resolve import get_zebpay_rest_url, get_zebpay_ws_feed, get_throttler
 from hummingbot.connector.exchange.zebpay.zebpay_utils import DEBUG
 
@@ -56,8 +56,6 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
     def __init__(self, trading_pairs: List[str]):
         super().__init__(trading_pairs)
 
-    # Found last trading price in Zebpay API. Utilized safe_gather to complete all tasks and append last trade prices
-    # for all trading pairs on results list.
     @classmethod
     async def get_last_traded_prices(cls, trading_pairs: List[str], domain=None) -> Dict[str, float]:
         """
@@ -87,9 +85,6 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
                     data = await resp.json()
                     raise IOError(f"Error fetching data from {url}. HTTP status is {resp.status}."
                                   f"Data is: {data}")
-                # based on previous GET requests to the Zebpay trade URL, the most recent trade is located at the -1
-                # index of the returned list of trades. This assumes pop() on the returned list is the optimal solution
-                # for retrieving the latest trade. Confirm this is also true for Zebpay.
                 try:
                     resp_json = await resp.json()
                     last_trade = resp_json[0]
@@ -173,12 +168,12 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
         async with aiohttp.ClientSession() as client:
             snapshot: Dict[str, Any] = await self.get_snapshot(client, trading_pair)
             snapshot_timestamp: float = time.time()
-            snapshot_msg: OrderBookMessage = zebpayOrderBook.snapshot_message_from_exchange(
+            snapshot_msg: OrderBookMessage = ZebpayOrderBook.snapshot_message_from_exchange(
                 snapshot,
                 snapshot_timestamp,
                 metadata={"trading_pair": trading_pair}
             )
-            active_order_tracker: zebpayActiveOrderTracker = zebpayActiveOrderTracker()
+            active_order_tracker: ZebpayActiveOrderTracker = ZebpayActiveOrderTracker()
             bids, asks = active_order_tracker.convert_snapshot_message_to_order_book_row(snapshot_msg)
             order_book = self.order_book_create_function()
             order_book.apply_snapshot(bids, asks, snapshot_msg.update_id)
@@ -186,32 +181,29 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
     async def get_tracking_pairs(self) -> Dict[str, OrderBookTrackerEntry]:
         """
-        *required
-        Initializes order books and order book trackers for the list of trading pairs
-        returned by `self.fetch_trading_pairs`
-        :returns: A dictionary of order book trackers for each trading pair
+        Initializes orderbooks and orderbook trackers for the list of trading pairs returned by fetch_trading_pairs
+        :returns a dictionary of orderbooks for each trading pair
         """
         # Get the currently active markets
         async with aiohttp.ClientSession() as client:
             trading_pairs: List[str] = self._trading_pairs
             retval: Dict[str, OrderBookTrackerEntry] = {}
-
             number_of_pairs: int = len(trading_pairs)
             for index, trading_pair in enumerate(trading_pairs):
                 try:
                     snapshot: Dict[str, Any] = await self.get_snapshot(client, trading_pair)
                     snapshot_timestamp: float = time.time()
-                    snapshot_msg: OrderBookMessage = zebpayOrderBook.snapshot_message_from_exchange(
+                    snapshot_msg: OrderBookMessage = ZebpayOrderBook.snapshot_message_from_exchange(
                         snapshot,
                         snapshot_timestamp,
                         metadata={"trading_pair": trading_pair}
                     )
                     order_book: OrderBook = self.order_book_create_function()
-                    active_order_tracker: zebpayActiveOrderTracker = zebpayActiveOrderTracker()
+                    active_order_tracker: ZebpayActiveOrderTracker = ZebpayActiveOrderTracker()
                     bids, asks = active_order_tracker.convert_snapshot_message_to_order_book_row(snapshot_msg)
                     order_book.apply_snapshot(bids, asks, snapshot_msg.update_id)
 
-                    retval[trading_pair] = zebpayOrderBookTrackerEntry(
+                    retval[trading_pair] = ZebpayOrderBookTrackerEntry(
                         trading_pair,
                         snapshot_timestamp,
                         order_book,
@@ -230,12 +222,11 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
                     self.logger().error(f"Error initializing order book for {trading_pair}.", exc_info=True)
             return retval
 
-    async def _inner_messages(self,
-                              ws: websockets.WebSocketClientProtocol) -> AsyncIterable[str]:
+    async def _inner_messages(self, ws: websockets.WebSocketClientProtocol) -> AsyncIterable[str]:
         """
-        Generator function that returns messages from the web socket stream
-        :param ws: current web socket connection
-        :returns: message in AsyncIterable format
+        Generator function that returns messages from the websocket stream
+        :param ws: the websocket client protocol used to connect to the Zebpay websocket API
+        :returns message from Zebpay websocket stream
         """
         # Terminate the recv() loop as soon as the next message timed out, so the outer loop can reconnect.
         try:
@@ -250,7 +241,7 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
                     except asyncio.TimeoutError:
                         raise
         except asyncio.TimeoutError:
-            self.logger().warning("Websock ping timed out. Going to reconnect...")
+            self.logger().warning("Websocket ping timed out. Going to reconnect...")
             return
         except ConnectionClosed:
             return
@@ -259,10 +250,9 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
     async def listen_for_trades(self, ev_loop: asyncio.BaseEventLoop, output: asyncio.Queue):
         """
-        *required
         Subscribe to trade channel via Zebpay WebSocket and keep the connection open for incoming messages.
         WebSocket trade subscription response example:
-            Input here...
+
         :param ev_loop: ev_loop to execute this function in
         :param output: an async queue where the incoming messages are stored
         """
@@ -292,7 +282,7 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
                             raise ValueError(f"Zebpay Websocket received error message - {msg['data']['message']}")
                         elif msg_type == "trades":
                             trade_timestamp: float = pd.Timestamp(msg["data"]["t"], unit="ms").timestamp()
-                            trade_msg: OrderBookMessage = zebpayOrderBook.trade_message_from_exchange(msg,
+                            trade_msg: OrderBookMessage = ZebpayOrderBook.trade_message_from_exchange(msg,
                                                                                                     trade_timestamp)
                             output.put_nowait(trade_msg)
                         elif msg_type == "subscriptions":
