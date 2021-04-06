@@ -306,7 +306,6 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
     async def listen_for_order_book_diffs(self, ev_loop: asyncio.BaseEventLoop, output: asyncio.Queue):
         """
-        *required
         Subscribe to "book" channel via Zebpay WebSocket and keep the connection open for incoming messages.
         WebSocket book subscription response example:
             Input example here...
@@ -364,9 +363,7 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
     async def listen_for_order_book_snapshots(self, ev_loop: asyncio.BaseEventLoop, output: asyncio.Queue):
         """
-        Subscribe to channel via web socket, and keep the connection open for incoming messages
-        WebSocket trade subscription response example:
-            Input example here...
+        Listens for orderbooks snapshots returned by the Zebpay API and updates respective trading pair orderbook
         :param ev_loop: ev_loop to execute this function in
         :param output: an async queue where the incoming messages are stored
         """
