@@ -38,20 +38,20 @@ MAX_RETRIES = 20
 NaN = float("nan")
 
 
-class zebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
+class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
     MESSAGE_TIMEOUT = 30.0
     PING_TIMEOUT = 10.0
 
     _zebpay_REST_URL: str = None
     _zebpay_WS_FEED: str = None
 
-    _iaobds_logger: Optional[HummingbotLogger] = None
+    _zaobds_logger: Optional[HummingbotLogger] = None
 
     @classmethod
     def logger(cls) -> HummingbotLogger:
-        if cls._iaobds_logger is None:
-            cls._iaobds_logger = logging.getLogger(__name__)
-        return cls._iaobds_logger
+        if cls._zaobds_logger is None:
+            cls._zaobds_logger = logging.getLogger(__name__)
+        return cls._zaobds_logger
 
     def __init__(self, trading_pairs: List[str]):
         super().__init__(trading_pairs)
@@ -60,13 +60,19 @@ class zebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
     # for all trading pairs on results list.
     @classmethod
     async def get_last_traded_prices(cls, trading_pairs: List[str], domain=None) -> Dict[str, float]:
+        """
+        Returns a dictionary containing the last traded price for each trading pair.
+        :param trading_pairs: A list of trading pairs supported by the Zebpay exchange
+        :param domain: The domain used in the method call (Zebpay Exchange or Zebpay Sandbox)
+        :returns a dictionary of trading pairs and associated last traded prices
+        """
         base_url: str = get_zebpay_rest_url(domain=domain)
         tasks = [cls.get_last_traded_price(t_pair, base_url) for t_pair in trading_pairs]
         results = await safe_gather(*tasks)
         return {t_pair: result for t_pair, result in zip(trading_pairs, results)}
 
     @classmethod
-    async def get_last_traded_price(cls, trading_pair: str, base_url: str = "") -> float:   # update str w/ zebpay url
+    async def get_last_traded_price(cls, trading_pair: str, base_url: str = "https://www.zebapi.com/pro/v1 ") -> float:
         async with get_throttler().weighted_task(request_weight=1):
             async with aiohttp.ClientSession() as client:
                 url = f"{base_url}/v1/trades/?market={trading_pair}"                        # update url w/ zebpay url
