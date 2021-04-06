@@ -250,9 +250,9 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
     async def listen_for_trades(self, ev_loop: asyncio.BaseEventLoop, output: asyncio.Queue):
         """
-        Subscribe to trade channel via Zebpay WebSocket and keep the connection open for incoming messages.
-        WebSocket trade subscription response example:
-
+        Subscribe to "history" channel via Zebpay WebSocket and keep the connection open for incoming messages.
+        WebSocket history subscription response example:
+            Input example here...
         :param ev_loop: ev_loop to execute this function in
         :param output: an async queue where the incoming messages are stored
         """
@@ -260,15 +260,17 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
         while True:
             zebpay_ws_feed = get_zebpay_ws_feed()
             if DEBUG:
-                self.logger().info(f"IOB.listen_for_trades new connection to ws: {zebpay_ws_feed}")
+                self.logger().info(f"ZOB.listen_for_trades new connection to ws: {zebpay_ws_feed}")
             try:
                 trading_pairs: List[str] = self._trading_pairs
                 async with websockets.connect(zebpay_ws_feed) as ws:
                     ws: websockets.WebSocketClientProtocol = ws
                     subscription_request: Dict[str, Any] = {
+                        # TODO Brian: Review subscription request format for Zebpay
                         "method": "subscribe",
                         "markets": trading_pairs,
-                        "subscriptions": ["trades"]
+                        # Working assumption that Zebpay WS trades are in the "history" subscription. Require format
+                        "subscriptions": ["history"]
                     }
                     await ws.send(ujson.dumps(subscription_request))
                     async for raw_msg in self._inner_messages(ws):
@@ -281,9 +283,10 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
                         elif msg_type == "error":
                             raise ValueError(f"Zebpay Websocket received error message - {msg['data']['message']}")
                         elif msg_type == "trades":
-                            trade_timestamp: float = pd.Timestamp(msg["data"]["t"], unit="ms").timestamp()
+                            # TODO Brian: Confirm lastModifiedDate key parsing is correct
+                            trade_timestamp: float = pd.Timestamp(msg["lastModifiedDate"], unit="ms").timestamp()
                             trade_msg: OrderBookMessage = ZebpayOrderBook.trade_message_from_exchange(msg,
-                                                                                                    trade_timestamp)
+                                                                                                      trade_timestamp)
                             output.put_nowait(trade_msg)
                         elif msg_type == "subscriptions":
                             self.logger().info("subscription to trade received")
@@ -303,9 +306,8 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
     async def listen_for_order_book_diffs(self, ev_loop: asyncio.BaseEventLoop, output: asyncio.Queue):
         """
-        *required
-        Subscribe to  channel via web socket, and keep the connection open for incoming messages
-        WebSocket trade subscription response example:
+        Subscribe to "book" channel via Zebpay WebSocket and keep the connection open for incoming messages.
+        WebSocket book subscription response example:
             Input example here...
         :param ev_loop: ev_loop to execute this function in
         :param output: an async queue where the incoming messages are stored
@@ -320,9 +322,11 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
                 async with websockets.connect(zebpay_ws_feed) as ws:
                     ws: websockets.WebSocketClientProtocol = ws
                     subscription_request: Dict[str, Any] = {
+                        # TODO Brian: Review subscription request format for Zebpay
                         "method": "subscribe",
                         "markets": trading_pairs,
-                        "subscriptions": ["l2orderbook"]
+                        # Working assumption that Zebpay WS diffs are in the "book" subscription. Require format
+                        "subscriptions": ["book"]
                     }
                     await ws.send(ujson.dumps(subscription_request))
                     async for raw_msg in self._inner_messages(ws):
@@ -336,9 +340,10 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
                             raise ValueError(f"Zebpay WebSocket message received error message - "
                                              f"{msg['data']['message']}")
                         elif msg_type == "l2orderbook":
+                            # TODO Brian: Confirm whether WS orderbook diffs have a timestamp
                             diff_timestamp: float = pd.Timestamp(msg["data"]["t"], unit="ms").timestamp()
                             order_book_message: OrderBookMessage = \
-                                zebpayOrderBook.diff_message_from_exchange(msg, diff_timestamp)
+                                ZebpayOrderBook.diff_message_from_exchange(msg, diff_timestamp)
                             output.put_nowait(order_book_message)
                         elif msg_type == "subscriptions":
                             self.logger().info("subscription to l2orderbook received")
@@ -357,6 +362,11 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
                 await asyncio.sleep(30.0)
 
     async def listen_for_order_book_snapshots(self, ev_loop: asyncio.BaseEventLoop, output: asyncio.Queue):
+        """
+        Listens for orderbooks snapshots returned by the Zebpay API and updates respective trading pair orderbook
+        :param ev_loop: ev_loop to execute this function in
+        :param output: an async queue where the incoming messages are stored
+        """
         while True:
             try:
                 async with aiohttp.ClientSession() as client:
@@ -366,7 +376,7 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
                             if DEBUG:
                                 self.logger().info(f'<<<<< aiohttp snapshot response: {snapshot}')
                             snapshot_timestamp: float = time.time()
-                            snapshot_msg: OrderBookMessage = zebpayOrderBook.snapshot_message_from_exchange(
+                            snapshot_msg: OrderBookMessage = ZebpayOrderBook.snapshot_message_from_exchange(
                                 snapshot,
                                 snapshot_timestamp,
                                 metadata={"trading_pair": trading_pair}
