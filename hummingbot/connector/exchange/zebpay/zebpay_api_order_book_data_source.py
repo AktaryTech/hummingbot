@@ -116,6 +116,8 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
             return result
 
     @staticmethod
+    # TODO Brian: Coordinate with Zebpay on API 404 error. All trading pairs that have a string value in the "volume"
+    #  field return a 404 Not Found error when queried by any public endpoint requests.
     async def fetch_trading_pairs(domain=None) -> List[str]:
         """
         Returns a list of all trading pairs available on the Zebpay exchange domain.
@@ -145,12 +147,15 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
     async def get_snapshot(client: aiohttp.ClientSession, trading_pair: str) -> Dict[str, Any]:
         """
         Fetches order book snapshot for a particular trading pair from the rest API
-        :returns: Response from the rest API
+        :param client: The client session used to make the API request
+        :param trading_pair: The trading pair used in the snapshot query
+        :returns an orderbook snapshot of bids/asks
         """
         async with get_throttler().weighted_task(request_weight=1):
-            # Zebpay level 2 order book is sufficient to provide required data. Confirm this
+            # Zebpay Orderbook API provides the first 15 bids and asks on the orderbook
+            # Todo Brian: Zebpay orderbook does not provide a sequence number - will rely on timestamp for sequencing
             base_url: str = get_zebpay_rest_url()
-            product_order_book_url: str = f"{base_url}/v1/orderbook?market={trading_pair}&level=2" # adjust to zebpay ur
+            product_order_book_url: str = f"{base_url}/market/{trading_pair}/book"
             async with client.get(product_order_book_url) as response:
                 response: aiohttp.ClientResponse = response
                 if response.status != 200:
@@ -160,6 +165,11 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
                 return data
 
     async def get_new_order_book(self, trading_pair: str) -> OrderBook:
+        """
+        Creates formatted orderbook instance for given trading pair
+        :param trading_pair: The trading pair used in the snapshot query
+        :returns an orderbook instance of the given trading pair
+        """
         async with aiohttp.ClientSession() as client:
             snapshot: Dict[str, Any] = await self.get_snapshot(client, trading_pair)
             snapshot_timestamp: float = time.time()
