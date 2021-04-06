@@ -101,6 +101,12 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
     @classmethod
     @cachetools.func.ttl_cache(ttl=10)
     def get_mid_price(cls, trading_pair: str, domain=None) -> Optional[Decimal]:
+        """
+        Returns a Decimal representing the mid-price between the current bid and ask prices.
+        :param trading_pair: The trading pair used in the price query
+        :param domain: The domain used in the method call (Zebpay Exchange or Zebpay Sandbox)
+        :returns A Decimal representing the mid-price between the current bid and ask prices.
+        """
         base_url: str = get_zebpay_rest_url(domain=domain)
         ticker_url: str = f"{base_url}/market/{trading_pair}/ticker"
         resp = requests.get(ticker_url)
@@ -111,14 +117,19 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
     @staticmethod
     async def fetch_trading_pairs(domain=None) -> List[str]:
+        """
+        Returns a list of all trading pairs available on the Zebpay exchange domain.
+        :param domain: The domain used in the method call (Zebpay Exchange or Zebpay Sandbox)
+        :returns a list of of all trading pairs available on the Zebpay exchange domain.
+        """
         async with get_throttler().weighted_task(request_weight=1):
             try:
                 async with aiohttp.ClientSession() as client:
                     base_url: str = get_zebpay_rest_url(domain=domain)
-                    async with client.get(f"{base_url}/v1/tickers", timeout=5) as response:
+                    async with client.get(f"{base_url}/market", timeout=5) as response:
                         if response.status == 200:
                             markets = await response.json()
-                            raw_trading_pairs: List[str] = list(map(lambda details: details.get('market'), markets))
+                            raw_trading_pairs: List[str] = list(map(lambda details: details.get('pair'), markets))
                             trading_pair_list: List[str] = []
                             for raw_trading_pair in raw_trading_pairs:
                                 trading_pair_list.append(raw_trading_pair)
