@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import logging
-import hummingbot.connector.exchange.crypto_com.crypto_com_constants as constants
 
 from sqlalchemy.engine import RowProxy
 from typing import (
@@ -91,7 +90,7 @@ class ZebpayOrderBook(OrderBook):
         *used for backtesting
         Convert a row of diff data into standard OrderBookMessage format
         :param record: a row of diff data from the database
-        :return: CryptoComOrderBookMessage
+        :return: ZebpayOrderBookMessage
         """
         return ZebpayOrderBookMessage(
             message_type=OrderBookMessageType.DIFF,
@@ -105,9 +104,11 @@ class ZebpayOrderBook(OrderBook):
                                     timestamp: Optional[float] = None,
                                     metadata: Optional[Dict] = None):
         """
-        Convert a trade data into standard OrderBookMessage format
-        :param record: a trade data from the database
-        :return: CryptoComOrderBookMessage
+        Convert JSON trade data into standard OrderBookMessage format
+        :param msg: JSON trade data from live web socket stream
+        :param timestamp: timestamp attached to incoming data
+        :param metadata: trading pair associated with trade message
+        :return: ZebpayOrderBookMessage
         """
 
         if metadata:
@@ -133,9 +134,9 @@ class ZebpayOrderBook(OrderBook):
         *used for backtesting
         Convert a row of trade data into standard OrderBookMessage format
         :param record: a row of trade data from the database
-        :return: CryptoComOrderBookMessage
+        :return: ZebpayOrderBookMessage
         """
-        return CryptoComOrderBookMessage(
+        return ZebpayOrderBookMessage(
             message_type=OrderBookMessageType.TRADE,
             content=record.json,
             timestamp=record.timestamp
@@ -143,8 +144,8 @@ class ZebpayOrderBook(OrderBook):
 
     @classmethod
     def from_snapshot(cls, snapshot: OrderBookMessage):
-        raise NotImplementedError(constants.EXCHANGE_NAME + " order book needs to retain individual order data.")
+        raise NotImplementedError("Zebpay orderbook needs to retain individual order data.")
 
     @classmethod
     def restore_from_snapshot_and_diffs(cls, snapshot: OrderBookMessage, diffs: List[OrderBookMessage]):
-        raise NotImplementedError(constants.EXCHANGE_NAME + " order book needs to retain individual order data.")
+        raise NotImplementedError("Zebpay orderbook needs to retain individual order data.")
