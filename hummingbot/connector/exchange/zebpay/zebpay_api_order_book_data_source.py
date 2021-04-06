@@ -72,10 +72,16 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
         return {t_pair: result for t_pair, result in zip(trading_pairs, results)}
 
     @classmethod
-    async def get_last_traded_price(cls, trading_pair: str, base_url: str = "https://www.zebapi.com/pro/v1 ") -> float:
+    async def get_last_traded_price(cls, trading_pair: str, base_url: str = "https://www.zebapi.com/pro/v1") -> float:
+        """
+        Returns a float of the last traded price for the given trading pair.
+        :param trading_pair: The trading pair used in the price query
+        :param base_url: The url used in the GET request (Zebpay Exchange or Zebpay Sandbox)
+        :returns a float of the last fill price for the given trading pair
+        """
         async with get_throttler().weighted_task(request_weight=1):
             async with aiohttp.ClientSession() as client:
-                url = f"{base_url}/v1/trades/?market={trading_pair}"                        # update url w/ zebpay url
+                url = f"{base_url}/market/{trading_pair}/trades"
                 resp = await client.get(url)
                 if resp.status != 200:
                     data = await resp.json()
@@ -86,8 +92,8 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
                 # for retrieving the latest trade. Confirm this is also true for Zebpay.
                 try:
                     resp_json = await resp.json()
-                    last_trade = resp_json[-1]
-                    return float(last_trade["price"])
+                    last_trade = resp_json[0]
+                    return float(last_trade["fill_price"])
                 except Exception as e:
                     raise IOError(f"Error fetching data from {url}. resp_json: {resp_json}."
                                   f"exception: {e}")
