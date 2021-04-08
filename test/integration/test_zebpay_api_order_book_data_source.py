@@ -16,6 +16,7 @@ from hummingbot.core.data_type.order_book_tracker_entry import OrderBookTrackerE
 from test.integration.assets.mock_data.fixture_zebpay import FixtureZebpay
 from hummingbot.connector.exchange.zebpay.zebpay_api_order_book_data_source import ZebpayAPIOrderBookDataSource
 from hummingbot.connector.exchange.zebpay.zebpay_order_book_message import ZebpayOrderBookMessage
+from hummingbot.connector.exchange.zebpay.zebpay_resolve import get_zebpay_rest_url, get_zebpay_ws_feed
 from hummingbot.core.data_type.order_book_message import OrderBookMessageType
 from hummingbot.core.data_type.order_book import OrderBook
 
@@ -41,6 +42,7 @@ class ZebpayAPIOrderBookDataSourceUnitTest(unittest.TestCase):
     ]
 
     GET_MOCK: str = 'aiohttp.ClientSession.get'
+    REQUEST_MOCK: str = 'requests.get'
 
     PATCH_BASE_PATH = \
         'hummingbot.connector.exchange.zebpay.zebpay_api_order_book_data_source.ZebpayAPIOrderBookDataSource.{method}'
@@ -52,14 +54,16 @@ class ZebpayAPIOrderBookDataSourceUnitTest(unittest.TestCase):
 
     def run_async(self, task):
         return self.ev_loop.run_until_complete(task)
-    '''
+
+    # Success
     def test_get_zebpay_rest_url(self):
-        self.assertEqual("https://www.zebpay.co/pro/v1", ZebpayAPIOrderBookDataSource.get_zebpay_rest_url())
+        self.assertEqual("https://www.zebapi.com/pro/v1", get_zebpay_rest_url())
 
+    # Success
     def test_get_zebpay_ws_feed(self):
-        self.assertEqual("wss://ws-feed.zebpay.com/marketdata", ZebpayAPIOrderBookDataSource.get_zebpay_ws_feed())
-    '''
+        self.assertEqual("wss://ws-feed.zebpay.com/marketdata", get_zebpay_ws_feed())
 
+    # Success
     def test_fetch_trading_pairs(self):
         # ETH URL
         trading_pairs: List[str] = self.run_async(
@@ -67,32 +71,36 @@ class ZebpayAPIOrderBookDataSourceUnitTest(unittest.TestCase):
         self.assertIn("DAI-INR", trading_pairs)
         self.assertIn("LTC-INR", trading_pairs)
 
-    def test_get_last_traded_price(self):
-        with patch(self.GET_MOCK, new_callable=AsyncMock) as mocked_get:
-            for t_pair in self.sample_pairs:
-                mocked_get.return_value.json.return_value = FixtureZebpay.TRADING_PAIR_TRADES
-                last_traded_price: float = self.run_async(
-                    self.order_book_data_source.get_last_traded_price(t_pair, "https://www.zebpay.co/pro/v1"))
-                self.assertEqual(0.01780000, last_traded_price)
+    # Success
+    @patch(GET_MOCK, new_callable=AsyncMock)
+    def test_get_last_traded_price(self, mocked_get):
+        for t_pair in self.sample_pairs:
+            mocked_get.return_value.json.return_value = FixtureZebpay.TRADING_PAIR_TRADES
+            mocked_get.return_value.status = 200
+            last_traded_price: float = self.run_async(
+                self.order_book_data_source.get_last_traded_price(t_pair, "https://www.zebpay.com/pro/v1"))
+            self.assertEqual(0.0005, last_traded_price)
 
+    # Success
     @patch(GET_MOCK, new_callable=AsyncMock)
     def test_get_last_traded_prices(self, mocked_get):
         # ETH URL
         mocked_get.return_value.json.return_value = FixtureZebpay.TRADING_PAIR_TRADES
+        mocked_get.return_value.status = 200
         last_traded_prices: List[str] = self.run_async(
             self.order_book_data_source.get_last_traded_prices(self.sample_pairs))
-        self.assertEqual({"DAI-INR": 0.01780000,
-                         "LTC-INR": 0.01780000}, last_traded_prices)
+        self.assertEqual({"DAI-INR": 0.0005,
+                         "LTC-INR": 0.0005}, last_traded_prices)
 
-    @patch(GET_MOCK, new_callable=AsyncMock)
+    # Requires review: receiving error "AttributeError: 'coroutine' object has no attribute 'json'"
+    # Likely due to the synchronous nature of requests.get called in get_mid_price. May require different mock format?
+    @patch(REQUEST_MOCK, new_callable=AsyncMock)
     def test_get_mid_price(self, mocked_get):
-        # ETH URL
         mocked_get.return_value.json.return_value = FixtureZebpay.TRADING_PAIR_TICKER
         for t_pair in self.sample_pairs:
-            t_pair_mid_price: List[str] = self.run_async(
-                self.order_book_data_source.get_mid_price(t_pair))
+            t_pair_mid_price: List[str] = self.order_book_data_source.get_mid_price(t_pair)
             # TODO: Confirm mid-price value
-            self.assertEqual(Decimal("0.016175005"), t_pair_mid_price)
+            self.assertEqual(Decimal("14963.00"), t_pair_mid_price)
             self.assertIsInstance(t_pair_mid_price, Decimal)
 
     async def get_snapshot(self, trading_pair):
