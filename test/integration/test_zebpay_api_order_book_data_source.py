@@ -7,7 +7,7 @@ import unittest
 import aiohttp
 import logging
 
-from typing import List
+from typing import List, Optional
 from unittest.mock import patch, AsyncMock
 
 from decimal import Decimal
@@ -55,6 +55,22 @@ class ZebpayAPIOrderBookDataSourceUnitTest(unittest.TestCase):
     def run_async(self, task):
         return self.ev_loop.run_until_complete(task)
 
+    def mocked_requests_get(*args, **kwargs):
+        class MockResponse:
+            def __init__(self, json_data, status_code):
+                self.json_data = json_data
+                self.status_code = status_code
+
+            def json(self):
+                return self.json_data
+
+        if args[0] == 'https://www.zebapi.com/pro/v1/market/DAI-INR/ticker':
+            return MockResponse(FixtureZebpay.TRADING_PAIR_TICKER, 200)
+        elif args[0] == 'https://www.zebapi.com/pro/v1/market/LTC-INR/ticker':
+            return MockResponse(FixtureZebpay.TRADING_PAIR_TICKER, 200)
+
+        return MockResponse(None, 404)
+
     # Success
     def test_get_zebpay_rest_url(self):
         self.assertEqual("https://www.zebapi.com/pro/v1", get_zebpay_rest_url())
@@ -94,13 +110,11 @@ class ZebpayAPIOrderBookDataSourceUnitTest(unittest.TestCase):
 
     # Requires review: receiving error "AttributeError: 'coroutine' object has no attribute 'json'"
     # Likely due to the synchronous nature of requests.get called in get_mid_price. May require different mock format?
-    @patch(REQUEST_MOCK, new_callable=AsyncMock)
+    @patch(REQUEST_MOCK, side_effect=mocked_requests_get)
     def test_get_mid_price(self, mocked_get):
-        mocked_get.return_value.json.return_value = FixtureZebpay.TRADING_PAIR_TICKER
         for t_pair in self.sample_pairs:
-            t_pair_mid_price: List[str] = self.order_book_data_source.get_mid_price(t_pair)
-            # TODO: Confirm mid-price value
-            self.assertEqual(Decimal("14963.00"), t_pair_mid_price)
+            t_pair_mid_price: Optional[Decimal] = self.order_book_data_source.get_mid_price(t_pair)
+            self.assertEqual(Decimal("14964.22"), t_pair_mid_price)
             self.assertIsInstance(t_pair_mid_price, Decimal)
 
     async def get_snapshot(self, trading_pair):

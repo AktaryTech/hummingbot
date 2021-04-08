@@ -128,14 +128,14 @@ class FixtureZebpay:
     ]
 
     TRADING_PAIR_TICKER = {
-        "buy": "14965.00",
-        "sell": "14963.00",
+        "buy": "14965.22",
+        "sell": "14963.22",
         "market": "14964.39",
         "volume": 4.95532,
         "24hoursHigh": "14965.69",
         "24hoursLow": "14962.39",
         "pricechange": "3.30",
-        "pair": "btc-aud",
+        "pair": "DAI-INR",
         "virtualCurrency": "btc",
         "currency": "aud"
     }
