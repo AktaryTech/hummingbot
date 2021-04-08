@@ -60,7 +60,7 @@ def get_zebpay_rest_url(domain=None):
 
 
 def get_zebpay_ws_feed(domain=None):
-    """Late resolution of idex WS url to give time for configuration to load"""
+    """Late resolution of zebpay WS url to give time for configuration to load"""
     if domain is not None:
         # we need to pass the domain only if the method is called before the market is instantiated
         return get_ws_url_for_domain(domain)
