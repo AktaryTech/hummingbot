@@ -79,7 +79,7 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
         """
         async with get_throttler().weighted_task(request_weight=1):
             async with aiohttp.ClientSession() as client:
-                url = f"{base_url}/market/{trading_pair}/trades"
+                url = f"{base_url}/pro/v1/market/{trading_pair}/trades"
                 resp = await client.get(url)
                 if resp.status != 200:
                     data = await resp.json()
@@ -103,7 +103,7 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
         :returns A Decimal representing the mid-price between the current bid and ask prices.
         """
         base_url: str = get_zebpay_rest_url(domain=domain)
-        ticker_url: str = f"{base_url}/market/{trading_pair}/ticker"
+        ticker_url: str = f"{base_url}/pro/v1/market/{trading_pair}/ticker"
         resp = requests.get(ticker_url)
         market = resp.json()
         if market.get('buy') and market.get('sell'):
@@ -123,7 +123,7 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
             try:
                 async with aiohttp.ClientSession() as client:
                     base_url: str = get_zebpay_rest_url(domain=domain)
-                    async with client.get(f"{base_url}/market", timeout=5) as response:
+                    async with client.get(f"{base_url}/pro/v1/market", timeout=5) as response:
                         if response.status == 200:
                             markets = await response.json()
                             raw_trading_pairs: List[str] = list(map(lambda details: details.get('pair'), markets))
@@ -150,7 +150,7 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
             # Zebpay Orderbook API provides the first 15 bids and asks on the orderbook
             # Todo Brian: Zebpay orderbook does not provide a sequence number - will rely on timestamp for sequencing
             base_url: str = get_zebpay_rest_url()
-            product_order_book_url: str = f"{base_url}/market/{trading_pair}/book"
+            product_order_book_url: str = f"{base_url}/pro/v1/market/{trading_pair}/book"
             async with client.get(product_order_book_url) as response:
                 response: aiohttp.ClientResponse = response
                 if response.status != 200:

@@ -5,8 +5,8 @@ from hummingbot.core.event.events import TradeType, OrderType
 from hummingbot.core.utils.asyncio_throttle import Throttler
 
 
-_ZEBPAY_REST_URL_SANDBOX = "https://www.zebpay.co/pro/v1"
-_ZEBPAY_REST_URL_PROD = "https://www.zebapi.com/pro/v1"
+_ZEBPAY_REST_URL_SANDBOX = "https://www.zebpay.co"
+_ZEBPAY_REST_URL_PROD = "https://www.zebapi.com"
 
 _ZEBPAY_WS_FEED_PROD = "wss://ws-feed.zebpay.com/marketdata"
 
