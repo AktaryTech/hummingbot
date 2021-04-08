@@ -140,7 +140,7 @@ class ZebpayAPIOrderBookDataSourceUnitTest(unittest.TestCase):
         # mocked_get.return_value.__aexit__.return_value = AsyncMock(side_effect=lambda *args: True)
         # mocked_get.return_value = MockGetResponse(FixtureZebpay.ORDER_BOOK_LEVEL2, 200)
 
-        snapshot = self.ev_loop.run_until_complete(self.get_snapshot("btc-aud"))
+        snapshot = self.ev_loop.run_until_complete(self.get_snapshot("DAI-INR"))
         # an artifact created by the way we mock. Normally run_until_complete() returns a result directly
         snapshot = snapshot.result()
         self.assertEqual(FixtureZebpay.ORDER_BOOK_LEVEL2, snapshot)
@@ -155,7 +155,7 @@ class ZebpayAPIOrderBookDataSourceUnitTest(unittest.TestCase):
         f.set_result(FixtureZebpay.SNAPSHOT_2)
         mock_get_snapshot.return_value = f.result()
 
-        orderbook = self.ev_loop.run_until_complete(self.order_book_data_source.get_new_order_book("btc-aud"))
+        orderbook = self.ev_loop.run_until_complete(self.order_book_data_source.get_new_order_book("DAI-INR"))
 
         print(orderbook.snapshot[0])
 

@@ -97,7 +97,7 @@ class FixtureZebpay:
             {"price": "14959.34",
              "amount": 65344},
         ],
-        "pair": "btc-aud"
+        "pair": "DAI-INR"
     }
 
     TRADING_PAIR_TRADES = [
