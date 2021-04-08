@@ -27,14 +27,14 @@ def get_new_client_order_id(is_buy: bool, trading_pair: str) -> str:
 
 
 KEYS = {
-    "idex_api_key":
+    "zebpay_api_key":
         ConfigVar(key="zebpay_api_key",
                   prompt="Enter your Zebpay API key >>> ",
                   required_if=using_exchange(EXCHANGE_NAME),
                   is_secure=True,
                   is_connect_key=True),
-    "idex_api_secret_key":
-        ConfigVar(key="idex_api_secret_key",
+    "zebpay_api_secret_key":
+        ConfigVar(key="zebpay_api_secret_key",
                   prompt="Enter your Zebpay API secret key>>> ",
                   required_if=using_exchange(EXCHANGE_NAME),
                   is_secure=True,
