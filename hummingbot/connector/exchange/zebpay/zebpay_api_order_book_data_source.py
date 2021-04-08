@@ -28,8 +28,8 @@ from hummingbot.core.data_type.order_book_tracker_data_source import OrderBookTr
 # import with change to get_last_traded_prices
 from hummingbot.core.utils.async_utils import safe_gather
 
-from hummingbot.connector.exchange.zebpay.zebpay_active_order_tracker import ZebpayActiveOrderTracker
-from hummingbot.connector.exchange.zebpay.zebpay_order_book_tracker_entry import ZebpayOrderBookTrackerEntry
+# from hummingbot.connector.exchange.zebpay.zebpay_active_order_tracker import ZebpayActiveOrderTracker
+# from hummingbot.connector.exchange.zebpay.zebpay_order_book_tracker_entry import ZebpayOrderBookTrackerEntry
 from hummingbot.connector.exchange.zebpay.zebpay_order_book import ZebpayOrderBook
 from hummingbot.connector.exchange.zebpay.zebpay_resolve import get_zebpay_rest_url, get_zebpay_ws_feed, get_throttler
 from hummingbot.connector.exchange.zebpay.zebpay_utils import DEBUG
