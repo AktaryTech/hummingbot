@@ -52,13 +52,12 @@ class ZebpayAPIOrderBookDataSourceUnitTest(unittest.TestCase):
 
     def run_async(self, task):
         return self.ev_loop.run_until_complete(task)
-    '''
+
     def test_get_zebpay_rest_url(self):
         self.assertEqual("https://www.zebpay.co/pro/v1", ZebpayAPIOrderBookDataSource.get_zebpay_rest_url())
 
     def test_get_zebpay_ws_feed(self):
         self.assertEqual("wss://ws-feed.zebpay.com/marketdata", ZebpayAPIOrderBookDataSource.get_zebpay_ws_feed())
-    '''
 
     def test_fetch_trading_pairs(self):
         # ETH URL
