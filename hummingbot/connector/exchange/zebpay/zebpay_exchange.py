@@ -23,16 +23,15 @@ from hummingbot.core.network_iterator import NetworkStatus
 from hummingbot.core.utils.async_utils import safe_ensure_future, safe_gather
 from hummingbot.core.utils.estimate_fee import estimate_fee
 
-from hummingbot.connector.exchange.zebpay.zebpay_auth import ZebpayAuth, OrderTypeEnum, OrderSideEnum
+from hummingbot.connector.exchange.zebpay.zebpay_auth import ZebpayAuth
 from hummingbot.connector.exchange.zebpay.zebpay_in_flight_order import ZebpayInFlightOrder
 from hummingbot.connector.exchange.zebpay.zebpay_order_book_tracker import ZebpayOrderBookTracker
 from hummingbot.connector.exchange.zebpay.zebpay_user_stream_tracker import ZebpayUserStreamTracker
-from hummingbot.connector.exchange.zebpay.zebpay_utils import (
-    hb_order_type_to_zebpay_param, hb_trade_type_to_zebpay_param, EXCHANGE_NAME, get_new_client_order_id, DEBUG,
-    ETH_GAS_LIMIT, BSC_GAS_LIMIT, HUMMINGBOT_GAS_LOOKUP,
-)
+from hummingbot.connector.exchange.zebpay.zebpay_utils import (EXCHANGE_NAME, get_new_client_order_id, DEBUG,
+                                                               HUMMINGBOT_GAS_LOOKUP
+                                                               )
 from hummingbot.connector.exchange.zebpay.zebpay_resolve import (
-    get_zebpay_rest_url, get_zebpay_blockchain, set_domain, get_throttler
+    get_zebpay_rest_url, set_domain, get_throttler
 )
 from hummingbot.core.utils import eth_gas_station_lookup, async_ttl_cache
 from hummingbot.logger import HummingbotLogger
@@ -40,12 +39,10 @@ from hummingbot.logger import HummingbotLogger
 s_decimal_0 = Decimal("0.0")
 ie_logger = None
 
-NORMALIZED_PRECISION = 1e-08  # see Numbers & Precision at: https://docs.zebpay.io/#data-types
-
 
 class ZebpayExchange(ExchangeBase):
 
-    name: str = EXCHANGE_NAME
+    NORMALIZED_PRECISION = 0.0001  # TODO: Confirm this is the correct precision value for Zebpay
 
     SHORT_POLL_INTERVAL = 11.0
     LONG_POLL_INTERVAL = 120.0
@@ -53,21 +50,22 @@ class ZebpayExchange(ExchangeBase):
 
     @classmethod
     def logger(cls) -> HummingbotLogger:
-        global ie_logger
-        if ie_logger is None:
-            ie_logger = logging.getLogger(__name__)
-        return ie_logger
+        global ze_logger
+        if ze_logger is None:
+            ze_logger = logging.getLogger(__name__)
+        return ze_logger
 
     def __init__(self,
-                 zebpay_api_key: str,
-                 zebpay_api_secret_key: str,
-                 zebpay_wallet_private_key: str,
+                 zebpay_client_id: str,     # TODO: Confirm validity of client id/secret and API secret as auth params
+                 zebpay_client_secret: str,
+                 zebpay_api_secret: str,
                  trading_pairs: Optional[List[str]] = None,
                  trading_required: bool = True,
-                 domain="eth"):
+                 domain="com"):
         """
-        :param zebpay_com_api_key: The API key to connect to private zebpay.io APIs.
-        :param zebpay_com_secret_key: The API secret.
+        :param zebpay_client_id: The client ID to connect to private zebpay APIs.
+        :param zebpay_client_secret: The client secret.
+        :param zebpay_api_secret: The API secret to generate the hash signature for authentication.
         :param trading_pairs: The market trading pairs which to track order book data.
         :param trading_required: Whether actual trading is needed.
         """
@@ -76,7 +74,7 @@ class ZebpayExchange(ExchangeBase):
         super().__init__()
         self._trading_required = trading_required
         self._trading_pairs = trading_pairs
-        self._zebpay_auth: ZebpayAuth = ZebpayAuth(zebpay_api_key, zebpay_api_secret_key, zebpay_wallet_private_key)
+        self._zebpay_auth: ZebpayAuth = ZebpayAuth(zebpay_client_id, zebpay_client_secret, zebpay_api_secret)
         self._account_available_balances = {}  # Dict[asset_name:str, Decimal]
         self._order_book_tracker = ZebpayOrderBookTracker(trading_pairs=trading_pairs, domain=domain)
         self._user_stream_tracker = ZebpayUserStreamTracker(self._zebpay_auth, trading_pairs, domain=domain)
@@ -85,7 +83,7 @@ class ZebpayExchange(ExchangeBase):
         self._shared_client: Optional[aiohttp.ClientSession] = None
         self._poll_notifier = asyncio.Event()
         self._last_timestamp = 0
-        self._in_flight_orders = {}  # Dict[client_order_id:str, zebpayComInFlightOrder]
+        self._in_flight_orders = {}  # Dict[client_order_id:str, ZebpayInFlightOrder]
         self._order_not_found_records = {}  # Dict[client_order_id:str, count:int]
         self._trading_rules = {}  # Dict[trading_pair:str, TradingRule]
         self._status_polling_task = None
@@ -107,10 +105,10 @@ class ZebpayExchange(ExchangeBase):
     @property
     def name(self) -> str:
         """Returns the exchange name"""
-        if self._domain == "eth":  # prod with ETH blockchain
-            return "zebpay"
+        if self._domain == "com":  # prod with ETH blockchain
+            return EXCHANGE_NAME
         else:
-            return f"zebpay_{self._domain}"
+            return f"zebpay_sandbox"
 
     @property
     def order_books(self) -> Dict[str, OrderBook]:
@@ -272,43 +270,29 @@ class ZebpayExchange(ExchangeBase):
     def _format_trading_rules(self, exchange_info: Dict[str, Any], market_info: List[Dict]) -> Dict[str, TradingRule]:
         """
         Converts json API response into a dictionary of trading rules.
-        :param exchange_info: The json API responsen for exchange rules
+        :param exchange_info: The json API response for exchange rules
         :param market_info: The json API response for trading pairs
         :return A dictionary of trading rules.
         Exchange Response Example:
         {
-            "timeZone": "UTC",
-            "serverTime": 1590408000000,
-            "ethereumDepositContractAddress": "0x...",
-            "ethUsdPrice": "206.46",
-            "gasPrice": 7,
-            "volume24hUsd": "10416227.98",
-            "makerFeeRate": "0.001",
-            "takerFeeRate": "0.002",
-            "makerTradeMinimum": "0.15000000",
-            "takerTradeMinimum": "0.05000000",
-            "withdrawalMinimum": "0.04000000"
-        }
-
-        Market Response Example:
-        [
-            {
-                "market": "ETH-USDC",
-                "status": "active",
-                "baseAsset": "ETH",
-                "baseAssetPrecision": 8,
-                "quoteAsset": "USDC",
-                "quoteAssetPrecision": 8
-            },
-            ...
-        ]
+                    "buy": "0",
+                    "sell": "0",
+                    "volume": 0,
+                    "pricechange": "0.00",
+                    "24hoursHigh": "0",
+                    "24hoursLow": "0",
+                    "pair": "BTC-AUD",
+                    "virtualCurrency": "BTC",
+                    "currency": "AUD"
+        },
+        ...
         """
         rules = {}
-        price_step = Decimal(str(NORMALIZED_PRECISION))
-        quantity_step = Decimal(str(NORMALIZED_PRECISION))
-        minimum_order_size = Decimal(str(exchange_info["makerTradeMinimum"]))
+        price_step = Decimal(str(self.NORMALIZED_PRECISION))
+        quantity_step = Decimal(str(self.NORMALIZED_PRECISION))
+        minimum_order_size = Decimal(str(exchange_info["makerTradeMinimum"]))        # TODO: Confirm min order size
         for t_pair in market_info:
-            trading_pair = t_pair["market"]
+            trading_pair = t_pair["pair"]
             try:
                 rules[trading_pair] = TradingRule(trading_pair=trading_pair,
                                                   min_order_size=minimum_order_size,
