@@ -28,8 +28,7 @@ from hummingbot.connector.exchange.zebpay.zebpay_in_flight_order import ZebpayIn
 from hummingbot.connector.exchange.zebpay.zebpay_order_book_tracker import ZebpayOrderBookTracker
 from hummingbot.connector.exchange.zebpay.zebpay_user_stream_tracker import ZebpayUserStreamTracker
 from hummingbot.connector.exchange.zebpay.zebpay_utils import (EXCHANGE_NAME, get_new_client_order_id, DEBUG,
-                                                               HUMMINGBOT_GAS_LOOKUP
-                                                               )
+                                                               HUMMINGBOT_GAS_LOOKUP)
 from hummingbot.connector.exchange.zebpay.zebpay_resolve import (
     get_zebpay_rest_url, set_domain, get_throttler
 )
