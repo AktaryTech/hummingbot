@@ -1,6 +1,7 @@
 import asyncio
 import aiohttp
 import logging
+import socketio
 
 import cachetools.func
 import pandas as pd
@@ -26,12 +27,13 @@ from hummingbot.core.data_type.order_book import OrderBook
 from hummingbot.core.data_type.order_book_tracker_data_source import OrderBookTrackerDataSource
 
 # import with change to get_last_traded_prices
-from hummingbot.core.utils.async_utils import safe_gather
+from hummingbot.core.utils.async_utils import safe_gather, safe_ensure_future
 
 # from hummingbot.connector.exchange.zebpay.zebpay_active_order_tracker import ZebpayActiveOrderTracker
 # from hummingbot.connector.exchange.zebpay.zebpay_order_book_tracker_entry import ZebpayOrderBookTrackerEntry
 from hummingbot.connector.exchange.zebpay.zebpay_order_book import ZebpayOrderBook
 from hummingbot.connector.exchange.zebpay.zebpay_resolve import get_zebpay_rest_url, get_zebpay_ws_feed, get_throttler
+from hummingbot.connector.exchange.zebpay.zebpay_api_custom_socketio_namespace import ZebpayCustomNamespace
 from hummingbot.connector.exchange.zebpay.zebpay_utils import DEBUG
 
 MAX_RETRIES = 20
@@ -44,6 +46,7 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
     _zebpay_REST_URL: str = None
     _zebpay_WS_FEED: str = None
+    _sio: socketio.AsyncClient = None
 
     _zaobds_logger: Optional[HummingbotLogger] = None
 
@@ -257,52 +260,21 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
         :param output: an async queue where the incoming messages are stored
         """
 
-        while True:
-            zebpay_ws_feed = get_zebpay_ws_feed()
-            if DEBUG:
-                self.logger().info(f"ZOB.listen_for_trades new connection to ws: {zebpay_ws_feed}")
-            try:
-                trading_pairs: List[str] = self._trading_pairs
-                async with websockets.connect(zebpay_ws_feed) as ws:
-                    ws: websockets.WebSocketClientProtocol = ws
-                    subscription_request: Dict[str, Any] = {
-                        # TODO Brian: Review subscription request format for Zebpay
-                        "method": "subscribe",
-                        "markets": trading_pairs,
-                        # Working assumption that Zebpay WS trades are in the "history" subscription. Require format
-                        "subscriptions": ["history"]
-                    }
-                    await ws.send(ujson.dumps(subscription_request))
-                    async for raw_msg in self._inner_messages(ws):
-                        msg = ujson.loads(raw_msg)
-                        msg_type: str = msg.get("type", None)
-                        if DEBUG:
-                            self.logger().debug(f'<<<<< ws msg: {msg}')
-                        if msg_type is None:
-                            raise ValueError(f"Zebpay Websocket message does not contain a type - {msg}")
-                        elif msg_type == "error":
-                            raise ValueError(f"Zebpay Websocket received error message - {msg['data']['message']}")
-                        elif msg_type == "trades":
-                            # TODO Brian: Confirm lastModifiedDate key parsing is correct
-                            trade_timestamp: float = pd.Timestamp(msg["lastModifiedDate"], unit="ms").timestamp()
-                            trade_msg: OrderBookMessage = ZebpayOrderBook.trade_message_from_exchange(msg,
-                                                                                                      trade_timestamp)
-                            output.put_nowait(trade_msg)
-                        elif msg_type == "subscriptions":
-                            self.logger().info("subscription to trade received")
-                        else:
-                            raise ValueError(f"Unrecognized Zebpay WebSocket message received - {msg}")
-                        await asyncio.sleep(0)
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                self.logger().network(
-                    f'{"Unexpected error with WebSocket connection."}',
-                    exc_info=True,
-                    app_warning_msg=f'{"Unexpected error with Websocket connection. Retrying in 30 seconds..."}'
-                                    f'{"Check network connection."}'
-                )
-                await asyncio.sleep(30.0)
+        zebpay_ws_feed = get_zebpay_ws_feed()
+        if DEBUG:
+            self.logger().info(f"ZOB.listen_for_trades new connection to ws: {zebpay_ws_feed}")
+        if self._sio is None:
+            self._sio = socketio.AsyncClient()
+            zebpayNamespace = ZebpayCustomNamespace()
+            zebpayNamespace.set_trade_queue(output)
+            self._sio.register_namespace(zebpayNamespace)
+            await self._sio.connect(zebpay_ws_feed, transports=['websocket'])
+        else:
+            zebpayNamespace = self._sio.namespace_handlers["/"]
+            zebpayNamespace.set_trade_queue(output)
+            self._sio.register_namespace(zebpayNamespace)
+
+        return ev_loop.create_future()
 
     async def listen_for_order_book_diffs(self, ev_loop: asyncio.BaseEventLoop, output: asyncio.Queue):
         """
@@ -317,49 +289,19 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
             zebpay_ws_feed = get_zebpay_ws_feed()
             if DEBUG:
                 self.logger().info(f"IOB.listen_for_order_book_diffs new connection to ws: {zebpay_ws_feed}")
-            try:
-                trading_pairs: List[str] = self._trading_pairs
-                async with websockets.connect(zebpay_ws_feed) as ws:
-                    ws: websockets.WebSocketClientProtocol = ws
-                    subscription_request: Dict[str, Any] = {
-                        # TODO Brian: Review subscription request format for Zebpay
-                        "method": "subscribe",
-                        "markets": trading_pairs,
-                        # Working assumption that Zebpay WS diffs are in the "book" subscription. Require format
-                        "subscriptions": ["book"]
-                    }
-                    await ws.send(ujson.dumps(subscription_request))
-                    async for raw_msg in self._inner_messages(ws):
-                        msg = ujson.loads(raw_msg)
-                        msg_type: str = msg.get("type", None)
-                        if DEBUG:
-                            self.logger().debug(f'<<<<< ws msg: {msg}')
-                        if msg_type is None:
-                            raise ValueError(f"Zebpay WebSocket message does not contain a type - {msg}")
-                        elif msg_type == "error":
-                            raise ValueError(f"Zebpay WebSocket message received error message - "
-                                             f"{msg['data']['message']}")
-                        elif msg_type == "l2orderbook":
-                            # TODO Brian: Confirm whether WS orderbook diffs have a timestamp
-                            diff_timestamp: float = pd.Timestamp(msg["data"]["t"], unit="ms").timestamp()
-                            order_book_message: OrderBookMessage = \
-                                ZebpayOrderBook.diff_message_from_exchange(msg, diff_timestamp)
-                            output.put_nowait(order_book_message)
-                        elif msg_type == "subscriptions":
-                            self.logger().info("subscription to l2orderbook received")
-                        else:
-                            raise ValueError(f"Unrecognized Zebpay WebSocket message received - {msg}")
-                        await asyncio.sleep(0)
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                self.logger().network(
-                    f'{"Unexpected error with WebSocket connection."}',
-                    exc_info=True,
-                    app_warning_msg=f'{"Unexpected error with WebSocket connection. Retrying in 30 seconds."}'
-                                    f'{"Check network connection."}'
-                )
-                await asyncio.sleep(30.0)
+
+            if self._sio is None:
+                self._sio = socketio.AsyncClient()
+                zebpayNamespace = ZebpayCustomNamespace()
+                zebpayNamespace.set_diff_queue(output)
+                self._sio.register_namespace(zebpayNamespace)
+                await self._sio.connect(zebpay_ws_feed, transports=['websocket'])
+            else:
+                zebpayNamespace = self._sio.namespace_handlers["/"]
+                zebpayNamespace.set_diff_queue(output)
+                self._sio.register_namespace(zebpayNamespace)
+
+            return ev_loop.create_future()
 
     async def listen_for_order_book_snapshots(self, ev_loop: asyncio.BaseEventLoop, output: asyncio.Queue):
         """
@@ -400,3 +342,9 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
             except Exception:
                 self.logger().error("Unexpected error.", exc_info=True)
                 await asyncio.sleep(5.0)
+
+    def stop_socketio_listening(self):
+        if self._sio is not None:
+            if self._sio.connected:
+                self.logger().info("Stopping websocket listener.")
+                safe_ensure_future(self._sio.disconnect())
