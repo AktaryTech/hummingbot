@@ -27,7 +27,7 @@ from hummingbot.core.data_type.order_book_message import OrderBookMessageType, O
 from hummingbot.core.data_type.order_book import OrderBook
 
 
-class ZebpayAPIOrderBookDataSourceUnitTest(AioHTTPTestCase):
+class ZebpayAPIOrderBookDataSourceUnitTest(unittest.TestCase):
 
     class AsyncIterator:
         def __init__(self, seq):
@@ -44,7 +44,8 @@ class ZebpayAPIOrderBookDataSourceUnitTest(AioHTTPTestCase):
 
     sample_pairs: List[str] = [
         "DAI-INR",
-        "LTC-INR"
+        "LTC-INR",
+        "BTC-INR"
     ]
 
     async def get_application(self):
@@ -307,49 +308,51 @@ class ZebpayAPIOrderBookDataSourceUnitTest(AioHTTPTestCase):
             # Validate the actual content injected is dict type
             self.assertIsInstance(event.content, dict)
 
-    @unittest_run_loop
-    async def test_listen_for_trades(self):
+    def test_listen_for_trades(self):
         trade_q = asyncio.Queue()
-        diff_q = asyncio.Queue()
+        timeout = 15
 
         #  Socket events receiving in the order from top to bottom
         mocked_socket_responses = [
             FixtureZebpay.WS_DIFF_ADD_BUY_ORDER,
-            # This should be ignored (for now, because of how the zebpay ws add works)
-            FixtureZebpay.WS_DIFF_ADD_SELL_ORDER,
-            # This should be ignored (for now, because of how the zebpay ws add works)
-            # FixtureZebpay.WS_DIFF_DELETE_BUY_ORDER,  # This should be added to the diff queue
-            # FixtureZebpay.WS_DIFF_DELETE_SELL_ORDER,  # This should be added to the diff queue
-            # FixtureZebpay.WS_LOAN_INFO_MSG,  # This should be ignored
-            # FixtureZebpay.WS_PAIR_INFO_MSG,  # This should be ignored
-            # FixtureZebpay.WS_TRADE_MATCH  # This should be added to the trade queue
+            FixtureZebpay.WS_DIFF_ADD_SELL_ORDER
         ]
 
-        zebpayNameSpace = ZebpayCustomNamespace()
-        zebpayNameSpace.set_diff_queue(diff_q)
-        zebpayNameSpace.set_trade_queue(trade_q)
+        print('{test_name} is going to run for {timeout} seconds, starting now'.format(
+            test_name=inspect.stack()[0][3],
+            timeout=timeout))
 
-        for event, message in mocked_socket_responses:
-            await zebpayNameSpace.trigger_event(event, message)
+        try:
+            self.run_async(
+                # Force exit from event loop after set timeout seconds
+                asyncio.wait_for(
+                    self.order_book_data_source.listen_for_trades(ev_loop=self.ev_loop, output=trade_q),
+                    timeout=timeout
+                )
+            )
+        except asyncio.exceptions.TimeoutError as e:
+            print(e)
 
-        first_event = diff_q.get_nowait()
-        second_event = diff_q.get_nowait()
+        print("Listening...")
+        self.run_async(asyncio.sleep(300))
+
+        first_event = trade_q.get_nowait()
+        second_event = trade_q.get_nowait()
 
         # two of the events should have been dropped
-        self.assertIs(diff_q.qsize(), 0)
-        self.assertIs(trade_q.qsize(), 0)
+        # self.assertIs(trade_q.qsize(), 0)
 
         recv_events = [first_event, second_event]
 
         for event in recv_events:
             # Validate the data inject into async queue is in Zebpay order book message type
-            self.assertIsInstance(event, OrderBookMessage)
+            self.assertEquale("Test", event)
 
             # Validate the event type is equal to TRADE
-            self.assertIn(event.type, [OrderBookMessageType.TRADE, OrderBookMessageType.DIFF])
+            # self.assertIn(event.type, [OrderBookMessageType.TRADE, OrderBookMessageType.DIFF])
 
             # Validate the actual content injected is dict type
-            self.assertIsInstance(event.content, dict)
+            # self.assertIsInstance(event.content, dict)
 
 
 def main():

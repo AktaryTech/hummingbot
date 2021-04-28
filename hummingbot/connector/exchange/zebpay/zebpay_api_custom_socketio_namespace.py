@@ -44,6 +44,7 @@ class ZebpayCustomNamespace(socketio.AsyncClientNamespace):
         super().__init__()
 
     def on_connect(self):
+        print("Connected")
         self.logger().info("Websocket connected.")
 
     def on_disconnect(self):
@@ -51,6 +52,9 @@ class ZebpayCustomNamespace(socketio.AsyncClientNamespace):
 
     def on_connect_error(self):
         self.logger().info("Websocket connection failed.")
+
+    def on_connect_timeout(self):
+        self.logger().info("Websocket connection timed out.")
 
     def set_diff_queue(self, output):
         if self._diff_queue is None:
@@ -84,9 +88,11 @@ class ZebpayCustomNamespace(socketio.AsyncClientNamespace):
         return self._diff_queue.put_nowait(diff_msg)
 
     def set_trade_queue(self, output):
+        print("Trade queue set")
         if self._trade_queue is None:
             self._trade_queue = output
 
+    '''
     def trade_handler(self, pair, args):
         # ignore message if queue isn't ready
         if self._trade_queue is None:
@@ -96,7 +102,8 @@ class ZebpayCustomNamespace(socketio.AsyncClientNamespace):
         msg["pair"] = pair
         trade_msg: OrderBookMessage = ZebpayOrderBook.trade_message_from_exchange(msg)
         return self._trade_queue.put_nowait(trade_msg)
-
+    '''
+    '''
     async def trigger_event(self, event, *args):
         """Dispatch an event to the proper handler method.
         Note: this method is a coroutine.
@@ -106,7 +113,7 @@ class ZebpayCustomNamespace(socketio.AsyncClientNamespace):
             return getattr(self, handler_name)(*args)
         else:
             # Format is:
-            # EVENT_PAIR_INFO_BY_SYMBOL_<QUOTE>_<BASE>      or
+            # EVENT/INFO_COUNTRY/<QUOTE>-<BASE>      or
             # <QUOTE>_<BASE>EVENT_MATCH      or
             # <QUOTE>_<BASE>EVENT_<ADD|DELETE>_ORDER_<BUY|SELL>
             try:
@@ -128,3 +135,24 @@ class ZebpayCustomNamespace(socketio.AsyncClientNamespace):
                         return
                     # must be a diff
                     return self.diff_handler(pair, action, side, args)
+    '''
+
+    async def trigger_event(self, event, *args):
+        """Dispatch an event to the proper handler method.
+                Note: this method is a coroutine.
+                """
+        print(f"Event being handled: {event}")
+        handler_name = 'on_' + event
+        if hasattr(self, handler_name):  # if it's a built-in event like connect or disconnect
+            return getattr(self, handler_name)(*args)
+        else:
+            return self.trade_handler(event, *args)
+
+    def trade_handler(self, event, args):
+        # ignore message if queue isn't ready
+        if self._trade_queue is None:
+            return
+        print(f"Trade event being handled-> {event}:{args}")
+        msg = {"Event": event,
+               "Arguments": args}
+        return self._trade_queue.put_nowait(msg)

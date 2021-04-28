@@ -261,18 +261,28 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
         """
 
         zebpay_ws_feed = get_zebpay_ws_feed()
+        subscriptions: List[List] = []
+
+        for trading_pair in self._trading_pairs:
+            subscriptions.append(['subscribe', f'ticker_singapore/{trading_pair}'])
+
         if DEBUG:
-            self.logger().info(f"ZOB.listen_for_trades new connection to ws: {zebpay_ws_feed}")
+            self.logger().info(f"IOB.listen_for_order_book_diffs new connection to ws: {zebpay_ws_feed}")
+
         if self._sio is None:
             self._sio = socketio.AsyncClient()
-            zebpayNamespace = ZebpayCustomNamespace()
-            zebpayNamespace.set_trade_queue(output)
-            self._sio.register_namespace(zebpayNamespace)
+            zebpay_namespace = ZebpayCustomNamespace()
+            zebpay_namespace.set_trade_queue(output)
+            self._sio.register_namespace(zebpay_namespace)
             await self._sio.connect(zebpay_ws_feed, transports=['websocket'])
         else:
-            zebpayNamespace = self._sio.namespace_handlers["/"]
-            zebpayNamespace.set_trade_queue(output)
-            self._sio.register_namespace(zebpayNamespace)
+            zebpay_namespace = self._sio.namespace_handlers["/"]
+            zebpay_namespace.set_trade_queue(output)
+            self._sio.register_namespace(zebpay_namespace)
+        print("Preparing Subscriptions")
+        for subscription in subscriptions:
+            print(f"Preparing Subscription: {subscription[0]} to {subscription[1]}")
+            await self._sio.emit(subscription[0], subscription[1])
 
         return ev_loop.create_future()
 
@@ -286,19 +296,27 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
         """
 
         zebpay_ws_feed = get_zebpay_ws_feed()
+        subscriptions: List[str] = []
+
+        for trading_pair in self._trading_pairs:
+            subscriptions.append('subscribe', f'ticker_singapore/{trading_pair}')
+
         if DEBUG:
             self.logger().info(f"IOB.listen_for_order_book_diffs new connection to ws: {zebpay_ws_feed}")
 
         if self._sio is None:
             self._sio = socketio.AsyncClient()
-            zebpayNamespace = ZebpayCustomNamespace()
-            zebpayNamespace.set_diff_queue(output)
-            self._sio.register_namespace(zebpayNamespace)
+            zebpay_namespace = ZebpayCustomNamespace()
+            zebpay_namespace.set_diff_queue(output)
+            self._sio.register_namespace(zebpay_namespace)
             await self._sio.connect(zebpay_ws_feed, transports=['websocket'])
         else:
-            zebpayNamespace = self._sio.namespace_handlers["/"]
-            zebpayNamespace.set_diff_queue(output)
-            self._sio.register_namespace(zebpayNamespace)
+            zebpay_namespace = self._sio.namespace_handlers["/"]
+            zebpay_namespace.set_diff_queue(output)
+            self._sio.register_namespace(zebpay_namespace)
+
+        for subscription in subscriptions:
+            await self._sio.emit(subscription)
 
         return ev_loop.create_future()
 
