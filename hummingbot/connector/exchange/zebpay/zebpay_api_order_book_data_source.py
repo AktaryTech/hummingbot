@@ -29,8 +29,8 @@ from hummingbot.core.data_type.order_book_tracker_data_source import OrderBookTr
 # import with change to get_last_traded_prices
 from hummingbot.core.utils.async_utils import safe_gather, safe_ensure_future
 
-# from hummingbot.connector.exchange.zebpay.zebpay_active_order_tracker import ZebpayActiveOrderTracker
-# from hummingbot.connector.exchange.zebpay.zebpay_order_book_tracker_entry import ZebpayOrderBookTrackerEntry
+from hummingbot.connector.exchange.zebpay.zebpay_active_order_tracker import ZebpayActiveOrderTracker
+from hummingbot.connector.exchange.zebpay.zebpay_order_book_tracker_entry import ZebpayOrderBookTrackerEntry
 from hummingbot.connector.exchange.zebpay.zebpay_order_book import ZebpayOrderBook
 from hummingbot.connector.exchange.zebpay.zebpay_resolve import get_zebpay_rest_url, get_zebpay_ws_feed, get_throttler
 from hummingbot.connector.exchange.zebpay.zebpay_api_custom_socketio_namespace import ZebpayCustomNamespace
@@ -285,23 +285,22 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
         :param output: an async queue where the incoming messages are stored
         """
 
-        while True:
-            zebpay_ws_feed = get_zebpay_ws_feed()
-            if DEBUG:
-                self.logger().info(f"IOB.listen_for_order_book_diffs new connection to ws: {zebpay_ws_feed}")
+        zebpay_ws_feed = get_zebpay_ws_feed()
+        if DEBUG:
+            self.logger().info(f"IOB.listen_for_order_book_diffs new connection to ws: {zebpay_ws_feed}")
 
-            if self._sio is None:
-                self._sio = socketio.AsyncClient()
-                zebpayNamespace = ZebpayCustomNamespace()
-                zebpayNamespace.set_diff_queue(output)
-                self._sio.register_namespace(zebpayNamespace)
-                await self._sio.connect(zebpay_ws_feed, transports=['websocket'])
-            else:
-                zebpayNamespace = self._sio.namespace_handlers["/"]
-                zebpayNamespace.set_diff_queue(output)
-                self._sio.register_namespace(zebpayNamespace)
+        if self._sio is None:
+            self._sio = socketio.AsyncClient()
+            zebpayNamespace = ZebpayCustomNamespace()
+            zebpayNamespace.set_diff_queue(output)
+            self._sio.register_namespace(zebpayNamespace)
+            await self._sio.connect(zebpay_ws_feed, transports=['websocket'])
+        else:
+            zebpayNamespace = self._sio.namespace_handlers["/"]
+            zebpayNamespace.set_diff_queue(output)
+            self._sio.register_namespace(zebpayNamespace)
 
-            return ev_loop.create_future()
+        return ev_loop.create_future()
 
     async def listen_for_order_book_snapshots(self, ev_loop: asyncio.BaseEventLoop, output: asyncio.Queue):
         """

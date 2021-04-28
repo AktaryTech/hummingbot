@@ -160,28 +160,39 @@ class FixtureZebpay:
         "pair": "btc-aud"
     }
 
-    '''
-    WS_PRICE_LEVEL_UPDATE_1 = json.dumps({
-        "type": "l2orderbook",
-        "data": {
-            "m": "ETH-USDC",
-            "t": 1590393540000,
-            "u": 71228110,
-            "b": [["202.00100000", "10.00000000", 1]],
-            "a": []
-        }
-    })
+    WS_DIFF_ADD_BUY_ORDER = [
+        "BTC_LTCEVENT_ADD_ORDER_BUY",
+        [
+            {
+                "price": 0.0060034,
+                "amount": 0.891,
+                "remain": 0.891,
+                "updatedAt": 1586809379,
+                "pairId": 4000063,
+                "status": 10,
+                "actionType": 1,
+                "userId": 4005597
+            }
+        ]
+    ]
 
-    WS_PRICE_LEVEL_UPDATE_2 = json.dumps({
-        "type": "l2orderbook",
-        "data": {
-            "m": "BAL-ETH",
-            "t": 1590383943830,
-            "u": 73848374,
-            "b": [["198.00100000", "8.00000000", 2]],
-            "a": []
-        }
-    })
+    WS_DIFF_ADD_SELL_ORDER = [
+        "BTC_XTZEVENT_ADD_ORDER_SELL",
+        [
+            {
+                "price": 0.00028707,
+                "amount": 19.58,
+                "remain": 19.58,
+                "updatedAt": 1586809372,
+                "pairId": 4000005,
+                "status": 10,
+                "actionType": 0,
+                "userId": 4005211
+            }
+        ]
+    ]
+
+    '''
 
     WS_SUBSCRIPTION_SUCCESS = json.dumps({
         "type": "subscriptions",
