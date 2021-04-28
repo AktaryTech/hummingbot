@@ -150,6 +150,7 @@ class ZebpayCustomNamespace(socketio.AsyncClientNamespace):
 
     def trade_handler(self, event, args):
         # ignore message if queue isn't ready
+        print("Incoming message")
         if self._trade_queue is None:
             return
         print(f"Trade event being handled-> {event}:{args}")

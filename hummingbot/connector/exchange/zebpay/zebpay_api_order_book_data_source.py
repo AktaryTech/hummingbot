@@ -299,7 +299,7 @@ class ZebpayAPIOrderBookDataSource(OrderBookTrackerDataSource):
         subscriptions: List[str] = []
 
         for trading_pair in self._trading_pairs:
-            subscriptions.append('subscribe', f'ticker_singapore/{trading_pair}')
+            subscriptions.append('subscribe', f'traderates/{trading_pair}')
 
         if DEBUG:
             self.logger().info(f"IOB.listen_for_order_book_diffs new connection to ws: {zebpay_ws_feed}")

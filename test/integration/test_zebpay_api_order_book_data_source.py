@@ -334,7 +334,7 @@ class ZebpayAPIOrderBookDataSourceUnitTest(unittest.TestCase):
             print(e)
 
         print("Listening...")
-        self.run_async(asyncio.sleep(300))
+        self.run_async(asyncio.sleep(3000))
 
         first_event = trade_q.get_nowait()
         second_event = trade_q.get_nowait()
