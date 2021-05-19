@@ -334,7 +334,7 @@ class ZebpayAPIOrderBookDataSourceUnitTest(unittest.TestCase):
             print(e)
 
         print("Listening...")
-        self.run_async(asyncio.sleep(3000))
+        self.run_async(asyncio.sleep(30))
 
         first_event = trade_q.get_nowait()
         second_event = trade_q.get_nowait()
@@ -346,7 +346,7 @@ class ZebpayAPIOrderBookDataSourceUnitTest(unittest.TestCase):
 
         for event in recv_events:
             # Validate the data inject into async queue is in Zebpay order book message type
-            self.assertEquale("Test", event)
+            self.assertEqual("Test", event)
 
             # Validate the event type is equal to TRADE
             # self.assertIn(event.type, [OrderBookMessageType.TRADE, OrderBookMessageType.DIFF])

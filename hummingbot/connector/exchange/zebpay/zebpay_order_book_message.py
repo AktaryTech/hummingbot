@@ -33,8 +33,6 @@ class ZebpayOrderBookMessage(OrderBookMessage):
 
     @property
     def update_id(self) -> int:
-        # TODO: Must rely on timestamps for comparison between snapshot and diff recency. These may be merged into one
-        #  statement in the future.
         if self.type is OrderBookMessageType.SNAPSHOT:
             return int(self.timestamp)
         elif self.type is OrderBookMessageType.DIFF:
@@ -45,20 +43,40 @@ class ZebpayOrderBookMessage(OrderBookMessage):
     @property
     def trade_id(self) -> int:
         if self.type is OrderBookMessageType.TRADE:
-            # TODO: Transaction ID provided in History API responses as "trans_id".
-            #  Confirm the same is provided in WS history responses.
-            return int(self.content["data"]["u"])
+            #  Transaction ID provided in History API responses as "trans_id".
+            #  WS history response must provide the same key/value pair or below keys will require adjustment.
+            '''
+            Sample WS response:
+            {
+                    "trans_id": 13,
+                    "fill_qty": 1000000,
+                    "fill_price": 0.0005,
+                    "fill_flags": 1,
+                    "currencyPair": "BTC-AUD",
+                    "lastModifiedDate": 1538576785865
+                    
+            }
+            '''
+            return int(self.content["trans_id"])
         return -1
 
     @property
     def trading_pair(self) -> str:
-        # TODO Brian: Confirm key/value pair for trading pairs in DIFF/TRADE/SNAPSHOT messages
-        # Trading pairs in DIFF/TRADE orderbook messages found in self.content[TBD].
-        # Trading pairs in SNAPSHOT orderbook messages found in self.content[TBD].
-        if self.content.get("data"):
-            return self.content["data"]["m"]
-        else:
-            return self.content["trading_pair"]
+        # Assumes the same key/value pair between API and WS responses.
+        '''
+        {
+            "asks": [],
+            "bids": [
+                {
+                "price": "14962.44",
+                "amount": 20044680
+                }
+            ],
+            "pair": "btc-aud"
+        }
+        '''
+
+        return self.content["pair"]
 
     @property
     def asks(self) -> List[OrderBookRow]:
