@@ -401,13 +401,8 @@ class ZebpayExchange(ExchangeBase):
                 if tracked_order is None:
                     raise IOError(f"Failed to cancel order - {client_order_id}: order not found.")
                 exchange_order_id = tracked_order.exchange_order_id
-                cancelled_id = await self.delete_order(trading_pair, client_order_id)
-                if not cancelled_id:
-                    if DEBUG:
-                        self.logger().error(f'self.delete_order({trading_pair}, {client_order_id}) returned empty')
-                    raise IOError(f"call to delete_order {client_order_id} returned empty: order not found")
-                format_cancelled_id = (cancelled_id[0] or {}).get("orderId")
-                if exchange_order_id == format_cancelled_id:
+                response = await self.delete_order(exchange_order_id)
+                if response["statusDescription"] == "success":
                     self.logger().info(f"Successfully cancelled order:{client_order_id}. "
                                        f"exchange id:{exchange_order_id}")
                     self.stop_tracking_order(client_order_id)
@@ -422,8 +417,8 @@ class ZebpayExchange(ExchangeBase):
                                               f'exchange_order_id: {exchange_order_id}')
                     return client_order_id
                 else:
-                    raise IOError(f"delete_order({client_order_id}) tracked with exchange id: {exchange_order_id} "
-                                  f"returned a different order id {format_cancelled_id}: order not found")
+                    raise IOError(f"delete_order({client_order_id}) tracked with exchange id: {exchange_order_id} was"
+                                  f"unsuccessful."
             except IOError as e:
                 self.logger().error(f"_execute_cancel error: order {client_order_id} does not exist on Zebpay. "
                                     f"No cancellation performed: {str(e)}")
@@ -477,7 +472,7 @@ class ZebpayExchange(ExchangeBase):
             result = await self._api_request("get", url, params, True)
             return result
 
-    async def delete_order(self, trading_pair: str, exchange_order_id: str):
+    async def delete_order(self, exchange_order_id: str):
         """
         Deletes an order or all orders associated with a wallet from the Zebpay API.
         Returns json data with order id confirming deletion
