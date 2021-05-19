@@ -418,7 +418,7 @@ class ZebpayExchange(ExchangeBase):
                     return client_order_id
                 else:
                     raise IOError(f"delete_order({client_order_id}) tracked with exchange id: {exchange_order_id} was"
-                                  f"unsuccessful."
+                                  f"unsuccessful.")
             except IOError as e:
                 self.logger().error(f"_execute_cancel error: order {client_order_id} does not exist on Zebpay. "
                                     f"No cancellation performed: {str(e)}")
