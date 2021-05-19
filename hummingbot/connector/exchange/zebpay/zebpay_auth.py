@@ -32,7 +32,7 @@ class ZebpayAuth:
         """generate uuid1 and return it as a string. Example return: cf7989e0-2030-11eb-8473-f1ca5eaaaff1"""
         return str(uuid.uuid1())
 
-    def generate_request_header(self) -> Dict[str, Any]:
+    def get_headers(self) -> Dict[str, Any]:
         request_id = self.generate_nonce()
 
         request_header = {

@@ -1,9 +1,9 @@
+import json
 import logging
 import math
 import time
 import asyncio
 import aiohttp
-
 
 from decimal import Decimal
 from typing import Optional, List, Dict, Any, AsyncIterable
@@ -301,6 +301,47 @@ class ZebpayExchange(ExchangeBase):
                 self.logger().error(f"Error parsing the exchange rules for {t_pair}. Skipping.", exc_info=True)
         return rules
 
+    async def _api_request(self,
+                           method: str,
+                           path_url: str,
+                           params: Dict[str, Any] = {},
+                           is_auth_required: bool = False) -> Dict[str, Any]:
+        """
+        Sends an aiohttp request and waits for a response.
+        :param method: The HTTP method, e.g. get or post
+        :param path_url: The path url or the API end point
+        :param is_auth_required: Whether an authentication is required, when True the function will add encrypted
+        signature to the request.
+        :returns A response in json format.
+        """
+        url = f"{get_zebpay_rest_url()}/{path_url}"
+        client = await self._http_client()
+        if is_auth_required:
+            headers = self.zebpay_auth.get_headers()
+        else:
+            headers = {"Content-Type": "application/json"}
+
+        if method == "get":
+            response = await client.get(url, headers=headers)
+        elif method == "post":
+            post_json = json.dumps(params)
+            response = await client.post(url, data=post_json, headers=headers)
+        else:
+            raise NotImplementedError
+
+        try:
+            parsed_response = json.loads(await response.text())
+        except Exception as e:
+            raise IOError(f"Error parsing data from {url}. Error: {str(e)}")
+        if response.status != 200:
+            raise IOError(f"Error fetching data from {url}. HTTP status is {response.status}. "
+                          f"Message: {parsed_response}")
+        if parsed_response["code"] != 0:
+            raise IOError(f"{url} API call failed, response: {parsed_response}")
+        # print(f"REQUEST: {method} {path_url} {params}")
+        # print(f"RESPONSE: {parsed_response}")
+        return parsed_response
+
     def buy(self, trading_pair: str, amount: Decimal, order_type=OrderType.MARKET,
             price: Decimal = s_decimal_NaN, **kwargs) -> str:
         """
@@ -410,17 +451,6 @@ class ZebpayExchange(ExchangeBase):
                                     f"Check API key and network connection.")
 
     # API Calls
-
-    async def get_ping(self):
-        """Requests status of current connection."""
-        async with get_throttler().weighted_task(request_weight=1):
-            rest_url = get_zebpay_rest_url()
-            url = f"{rest_url}/v1/ping/"
-            session: aiohttp.ClientSession = await self._http_client()
-            async with session.get(url) as response:
-                if response.status != 200:
-                    raise IOError(f"Error fetching data from {url}. HTTP status is {response.status}. {response}")
-            return
 
     async def list_orders(self) -> List[Dict[str, Any]]:
         """Requests status of all active orders. Returns json data of all orders associated with wallet address"""
