@@ -12,21 +12,6 @@ _ZEBPAY_WS_FEED_PROD = "wss://ws-feed.zebpay.com/marketdata"
 
 _IS_ZEBPAY_SANDBOX = None
 
-# Websocket stream constants
-BUY_MSG = "BUY"
-BUY_ACTION_TYPE = 1
-SELL_MSG = "SELL"
-SELL_ACTION_TYPE = 0
-TRADE_MSG = "MATCH"
-DIFF_MSG = "DIFF"
-ADD_MSG = "ADD"
-DELETE_MSG = "DELETE"
-
-ORDER_FAILED = -1
-ORDER_PENDING = 10
-ORDER_FINISHED = 1
-ORDER_CANCELLED = 2
-
 
 def set_domain(domain):
     """Save user selected domain so we don't have to pass around domain to every method"""
