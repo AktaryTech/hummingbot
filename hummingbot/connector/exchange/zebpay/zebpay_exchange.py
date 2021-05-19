@@ -458,8 +458,8 @@ class ZebpayExchange(ExchangeBase):
         async with get_throttler().weighted_task(request_weight=1):
             rest_url = get_zebpay_rest_url()
             url = f"{rest_url}/orders"
-            list_orders_result = await self._api_request("get", url, {}, True)
-            return list_orders_result
+            result = await self._api_request("get", url, {}, True)
+            return result
 
     async def get_order(self, exchange_order_id: str) -> Dict[str, Any]:
         """Requests order information through API with exchange order Id. Returns json data with order details"""
@@ -468,27 +468,12 @@ class ZebpayExchange(ExchangeBase):
                 self.logger().warning(f'<|<|<|<|< entering get_order({exchange_order_id})')
 
             rest_url = get_zebpay_rest_url()
-            url = f"{rest_url}/v1/orders"
+            url = f"{rest_url}orders"
             params = {
-                "nonce": self._zebpay_auth.generate_nonce(),
-                "wallet": self._zebpay_auth.get_wallet_address(),
-                "orderId": exchange_order_id
+                "orderid": exchange_order_id
             }
-            auth_dict = self._zebpay_auth.generate_auth_dict(http_method="GET", url=url, params=params)
-            session: aiohttp.ClientSession = await self._http_client()
-            async with session.get(auth_dict["url"], headers=auth_dict["headers"]) as response:
-                if response.status != 200:
-                    data = await response.json()
-                    if DEBUG:
-                        self.logger().error(
-                            f"get_order(exchange_order_id:{exchange_order_id}) error {response}. data: {data}"
-                        )
-                        orders_resp = await self.list_orders()  # todo alf: to be removed
-                        self.logger().warning(  # todo alf: to be removed
-                            f"<|<|<|<|<calling list_orders() inside get_order() for additional info: {orders_resp}")
-                    raise IOError(f"Error fetching data from {url}, {auth_dict['url']}. HTTP status is {response.status}. {data}")
-                data = await response.json()
-                return data
+            result = await self._api_request("get", url, params, True)
+            return result
 
 
     async def delete_order(self, trading_pair: str, client_order_id: str):
