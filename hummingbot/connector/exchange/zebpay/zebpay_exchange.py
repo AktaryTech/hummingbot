@@ -833,7 +833,7 @@ class ZebpayExchange(ExchangeBase):
             if DEBUG:
                 self.logger().warning('<<<< entering cancel_all')
             incomplete_orders = [o for o in self._in_flight_orders.values() if not o.is_done]
-            tasks = [self.delete_order(o.trading_pair, o.client_order_id) for o in incomplete_orders]
+            tasks = [self.delete_order(o.exchange_order_id) for o in incomplete_orders]
             order_id_set = set([o.client_order_id for o in incomplete_orders])
             successful_cancellations = []
             try:
