@@ -346,7 +346,7 @@ class ZebpayAPIOrderBookDataSourceUnitTest(unittest.TestCase):
 
         for event in recv_events:
             # Validate the data inject into async queue is in Zebpay order book message type
-            self.assertEquale("Test", event)
+            self.assertEqual("Test", event)
 
             # Validate the event type is equal to TRADE
             # self.assertIn(event.type, [OrderBookMessageType.TRADE, OrderBookMessageType.DIFF])
