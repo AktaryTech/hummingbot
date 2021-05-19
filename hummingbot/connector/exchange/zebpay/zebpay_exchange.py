@@ -322,7 +322,8 @@ class ZebpayExchange(ExchangeBase):
             headers = {"Content-Type": "application/json"}
 
         if method == "get":
-            response = await client.get(url, headers=headers)
+            get_json = json.dumps(params)
+            response = await client.get(url, data=get_json, headers=headers)
         elif method == "post":
             post_json = json.dumps(params)
             response = await client.post(url, data=post_json, headers=headers)
@@ -353,9 +354,9 @@ class ZebpayExchange(ExchangeBase):
         :param price: The price (note: this is no longer optional)
         :returns A new internal order id
         """
-        order_id: str = get_new_client_order_id(True, trading_pair)
-        safe_ensure_future(self._create_order(TradeType.BUY, order_id, trading_pair, amount, order_type, price))
-        return order_id
+        client_order_id: str = get_new_client_order_id(True, trading_pair)
+        safe_ensure_future(self._create_order(TradeType.BUY, client_order_id, trading_pair, amount, order_type, price))
+        return client_order_id
 
     def sell(self, trading_pair: str, amount: Decimal, order_type=OrderType.MARKET,
              price: Decimal = s_decimal_NaN, **kwargs) -> str:
@@ -368,9 +369,9 @@ class ZebpayExchange(ExchangeBase):
         :param price: The price (note: this is no longer optional)
         :returns A new internal order id
         """
-        order_id: str = get_new_client_order_id(False, trading_pair)
-        safe_ensure_future(self._create_order(TradeType.SELL, order_id, trading_pair, amount, order_type, price))
-        return order_id
+        client_order_id: str = get_new_client_order_id(False, trading_pair)
+        safe_ensure_future(self._create_order(TradeType.SELL, client_order_id, trading_pair, amount, order_type, price))
+        return client_order_id
 
     def cancel(self, trading_pair: str, client_order_id: str):
         """
@@ -453,21 +454,12 @@ class ZebpayExchange(ExchangeBase):
     # API Calls
 
     async def list_orders(self) -> List[Dict[str, Any]]:
-        """Requests status of all active orders. Returns json data of all orders associated with wallet address"""
+        """Requests status of all active orders. Returns json data of all orders associated with user account"""
         async with get_throttler().weighted_task(request_weight=1):
             rest_url = get_zebpay_rest_url()
-            url = f"{rest_url}/v1/orders"
-            params = {
-                "nonce": self._zebpay_auth.generate_nonce(),
-                "wallet": self._zebpay_auth.get_wallet_address()
-            }
-            auth_dict = self._zebpay_auth.generate_auth_dict(http_method="GET", url=url, params=params)
-            session: aiohttp.ClientSession = await self._http_client()
-            async with session.get(auth_dict["url"], headers=auth_dict["headers"]) as response:
-                if response.status != 200:
-                    raise IOError(f"Error fetching data from {url}. HTTP status is {response.status}. {response}")
-                data = await response.json()
-                return data
+            url = f"{rest_url}/orders"
+            list_orders_result = await self._api_request("get", url, {}, True)
+            return list_orders_result
 
     async def get_order(self, exchange_order_id: str) -> Dict[str, Any]:
         """Requests order information through API with exchange order Id. Returns json data with order details"""
@@ -498,61 +490,6 @@ class ZebpayExchange(ExchangeBase):
                 data = await response.json()
                 return data
 
-    async def post_order(self, params) -> Dict[str, Any]:
-        """Posts an order request to the Zebpay API. Returns json data with order details"""
-        async with get_throttler().weighted_task(request_weight=1):
-            rest_url = get_zebpay_rest_url()
-            url = f"{rest_url}/v1/orders"
-
-            params.update({
-                "nonce": self._zebpay_auth.generate_nonce(),
-                "wallet": self._zebpay_auth.get_wallet_address()
-            })
-
-            if params["type"] == "market":
-                order_type = OrderTypeEnum.market
-            elif params["type"] == "limit":
-                order_type = OrderTypeEnum.limit
-            elif params["type"] == "limitMaker":
-                order_type = OrderTypeEnum.limitMaker
-
-            if params["side"] == "buy":
-                trade_type = OrderSideEnum.buy
-            elif params["side"] == "sell":
-                trade_type = OrderSideEnum.sell
-
-            signature_parameters = self._zebpay_auth.build_signature_params_for_order(
-                # TODO: Did not include: stop_price, time_in_force, and selftrade_prevention. Add later as required.
-                market=params["market"],
-                order_type=order_type,
-                order_side=trade_type,
-                order_quantity=params["quantity"],
-                quantity_in_quote=False,
-                price=params["price"],
-                client_order_id=params["clientOrderId"],
-            )
-            wallet_signature = self._zebpay_auth.wallet_sign(signature_parameters)
-
-            body = {
-                "parameters": params,
-                "signature": wallet_signature
-            }
-            if DEBUG:
-                self.logger().info(f"post_order body: {body}")
-
-            auth_dict = self._zebpay_auth.generate_auth_dict_for_post(url=url, body=body)
-            session: aiohttp.ClientSession = await self._http_client()
-            async with session.post(auth_dict["url"], data=auth_dict["body"], headers=auth_dict["headers"]) as response:
-                if response.status != 200:
-                    data = await response.json()
-                    if DEBUG:
-                        self.logger().warning(f'failed post_order. Response data: {data}')
-                    raise IOError(f"Error posting data to {url}. HTTP status is {response.status}."
-                                  f"Data is: {data}")
-                data = await response.json()
-                if DEBUG:
-                    self.logger().warning(f'<|<|<|<|< post_order returned: {data}')
-                return data
 
     async def delete_order(self, trading_pair: str, client_order_id: str):
         """
@@ -651,9 +588,6 @@ class ZebpayExchange(ExchangeBase):
                     raise Exception(f"Unsupported order type: {order_type}")
                 trading_rule = self._trading_rules[trading_pair]  # No trading rules applied at this time
 
-                zebpay_order_param = hb_order_type_to_zebpay_param(order_type)
-                zebpay_trade_param = hb_trade_type_to_zebpay_param(trade_type)
-
                 amount = self.quantize_order_amount(trading_pair, amount)
                 price = self.quantize_order_price(trading_pair, price)
 
@@ -661,19 +595,21 @@ class ZebpayExchange(ExchangeBase):
                     raise ValueError(f"Buy order amount {amount} is lower than the minimum order size "
                                      f"{trading_rule.min_order_size}. client_order_id: {client_order_id}")
 
+                if trade_type.value == 1:
+                    trade_side = "bid"
+                else:
+                    trade_type = "ask"
+
+                url = f"{get_zebpay_rest_url()}/orders"
                 api_params = {
-                    "market": trading_pair,
-                    "type": zebpay_order_param,
-                    "side": zebpay_trade_param,
-                    "quantity": f'{amount:.8f}',
+                    "trade_pair": trading_pair,
+                    "side": trade_side,
+                    "size": f'{amount:.8f}',
                     "price": f'{price:.8f}',
-                    "clientOrderId": client_order_id,
-                    "timeInForce": "gtc",
-                    "selfTradePrevention": "dc"
                 }
 
-                order_result = await self.post_order(api_params)
-                exchange_order_id = order_result.get("orderId")
+                order_result = await self._api_request("post", url, api_params, True)
+                exchange_order_id = order_result.get("id")
                 self.start_tracking_order(client_order_id,
                                           exchange_order_id,
                                           trading_pair,
