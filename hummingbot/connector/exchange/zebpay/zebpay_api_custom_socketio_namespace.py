@@ -50,10 +50,10 @@ class ZebpayCustomNamespace(socketio.AsyncClientNamespace):
     def on_disconnect(self):
         self.logger().info("Websocket disconnected.")
 
-    def on_error(self):
+    def on_connect_error(self):
         self.logger().info("Websocket connection failed.")
 
-    def on_timeout(self):
+    def on_connect_timeout(self):
         self.logger().info("Websocket connection timed out.")
 
     def set_diff_queue(self, output):
