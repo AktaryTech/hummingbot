@@ -506,23 +506,17 @@ class ZebpayExchange(ExchangeBase):
         """Requests basic info about zebpay exchange. We are mostly interested in the gas price in gwei"""
         async with get_throttler().weighted_task(request_weight=1):
             rest_url = get_zebpay_rest_url()
-            url = f"{rest_url}/v1/exchange"
-            session: aiohttp.ClientSession = await self._http_client()
-            async with session.get(url) as response:
-                if response.status != 200:
-                    raise IOError(f"Error fetching data from {url}. HTTP status is {response.status}")
-                return await response.json()
+            url = f"{rest_url}/market"
+            result = await self._api_request("get", url, {}, False)
+            return result
 
-    async def get_market_info_from_api(self) -> List[Dict]:
+    async def get_market_info_from_api(self) -> Dict[str, Any]:
         """Requests all markets (trading pairs) available to Zebpay users."""
         async with get_throttler().weighted_task(request_weight=1):
             rest_url = get_zebpay_rest_url()
-            url = f"{rest_url}/v1/markets"
-            session: aiohttp.ClientSession = await self._http_client()
-            async with session.get(url) as response:
-                if response.status != 200:
-                    raise IOError(f"Error fetching data from {url}. HTTP status is {response.status}")
-                return await response.json()
+            url = f"{rest_url}/api/v1/tradepairs/in"
+            result = await self._api_request("get", url, {}, False)
+            return result
 
     async def _create_order(self,
                             trade_type: TradeType,
