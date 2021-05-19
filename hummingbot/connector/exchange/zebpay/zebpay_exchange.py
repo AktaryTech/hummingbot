@@ -324,7 +324,7 @@ class ZebpayExchange(ExchangeBase):
         if method == "get":
             get_json = json.dumps(params)
             response = await client.get(url, data=get_json, headers=headers)
-        elif method == "post":
+        elif method == "post" or method == "delete":
             post_json = json.dumps(params)
             response = await client.post(url, data=post_json, headers=headers)
         else:
@@ -392,6 +392,8 @@ class ZebpayExchange(ExchangeBase):
         :param client_order_id: The internal order id
         order.last_state to change to CANCELED
         """
+
+        # Must call _api_request with exchange_order_id
         async with self._order_lock:
             self.logger().warning(f'entering _execute_cancel({trading_pair}, {client_order_id})')
             try:
@@ -475,43 +477,19 @@ class ZebpayExchange(ExchangeBase):
             result = await self._api_request("get", url, params, True)
             return result
 
-
-    async def delete_order(self, trading_pair: str, client_order_id: str):
+    async def delete_order(self, trading_pair: str, exchange_order_id: str):
         """
         Deletes an order or all orders associated with a wallet from the Zebpay API.
         Returns json data with order id confirming deletion
         """
         async with get_throttler().weighted_task(request_weight=1):
             rest_url = get_zebpay_rest_url()
-            url = f"{rest_url}/v1/orders"
+            url = f"{rest_url}/orders/{exchange_order_id}"
 
-            params = {
-                "nonce": self._zebpay_auth.generate_nonce(),
-                "wallet": self._zebpay_auth.get_wallet_address(),
-                "orderId": f"client:{client_order_id}",
-            }
-            signature_parameters = self._zebpay_auth.build_signature_params_for_cancel_order(
-                # potential value: client_order_id=f"client:{order_id}"
-                client_order_id=f"client:{client_order_id}",
-            )
-            wallet_signature = self._zebpay_auth.wallet_sign(signature_parameters)
+            result = await self._api_request("delete", url, True)
+            return result
 
-            body = {
-                "parameters": params,
-                "signature": wallet_signature
-            }
-
-            auth_dict = self._zebpay_auth.generate_auth_dict_for_delete(url=url, body=body, wallet_signature=wallet_signature)
-            session: aiohttp.ClientSession = await self._http_client()
-            # if DEBUG:
-            self.logger().info(f"Cancelling order {client_order_id} for {trading_pair}.")
-            async with session.delete(auth_dict["url"], data=auth_dict["body"], headers=auth_dict["headers"]) as response:
-                if response.status != 200:
-                    data = await response.json()
-                    raise IOError(f"Error fetching data from {url}. HTTP status is {response.status}. {data}")
-                data = await response.json()
-                return data
-
+    # Zebpay API does not currently support user balance retrieval in the API per the documentation
     async def get_balances_from_api(self) -> List[Dict[str, Any]]:
         """Requests current balances of all assets through API. Returns json data with balance details"""
         async with get_throttler().weighted_task(request_weight=1):
