@@ -41,8 +41,6 @@ ie_logger = None
 
 class ZebpayExchange(ExchangeBase):
 
-    NORMALIZED_PRECISION = 0.0001  # TODO: Confirm this is the correct precision value for Zebpay
-
     SHORT_POLL_INTERVAL = 11.0
     LONG_POLL_INTERVAL = 120.0
     UPDATE_ORDER_STATUS_MIN_INTERVAL = 45.0
@@ -58,6 +56,7 @@ class ZebpayExchange(ExchangeBase):
                  zebpay_client_id: str,     # TODO: Confirm validity of client id/secret and API secret as auth params
                  zebpay_client_secret: str,
                  zebpay_api_secret: str,
+                 user_country: str,
                  trading_pairs: Optional[List[str]] = None,
                  trading_required: bool = True,
                  domain="com"):
@@ -65,10 +64,12 @@ class ZebpayExchange(ExchangeBase):
         :param zebpay_client_id: The client ID to connect to private zebpay APIs.
         :param zebpay_client_secret: The client secret.
         :param zebpay_api_secret: The API secret to generate the hash signature for authentication.
+        :param user_country: The country the Zebpay user is from - affects the available trading-pairs/rules
         :param trading_pairs: The market trading pairs which to track order book data.
         :param trading_required: Whether actual trading is needed.
         """
         self._domain = domain
+        self._country = user_country
         set_domain(domain)
         super().__init__()
         self._trading_required = trading_required
@@ -261,12 +262,11 @@ class ZebpayExchange(ExchangeBase):
                 await asyncio.sleep(0.5)
 
     async def _update_trading_rules(self):
-        exchange_info = self._exchange_info if self._exchange_info else await self.get_exchange_info_from_api()
         market_info = self._market_info if self._market_info else await self.get_market_info_from_api()
         self._trading_rules.clear()
-        self._trading_rules = self._format_trading_rules(exchange_info, market_info)
+        self._trading_rules = self._format_trading_rules(market_info)
 
-    def _format_trading_rules(self, exchange_info: Dict[str, Any], market_info: List[Dict]) -> Dict[str, TradingRule]:
+    def _format_trading_rules(self, market_info: List[Dict[str, Any]]) -> Dict[str, TradingRule]:
         """
         Converts json API response into a dictionary of trading rules.
         :param exchange_info: The json API response for exchange rules
@@ -287,18 +287,18 @@ class ZebpayExchange(ExchangeBase):
         ...
         """
         rules = {}
-        price_step = Decimal(str(self.NORMALIZED_PRECISION))
-        quantity_step = Decimal(str(self.NORMALIZED_PRECISION))
-        minimum_order_size = Decimal(str(exchange_info["makerTradeMinimum"]))        # TODO: Confirm min order size
-        for t_pair in market_info:
-            trading_pair = t_pair["pair"]
+        for trading_pair in market_info:
+            trading_pair_name = trading_pair["tradePairName"]
             try:
-                rules[trading_pair] = TradingRule(trading_pair=trading_pair,
-                                                  min_order_size=minimum_order_size,
-                                                  min_price_increment=price_step,
-                                                  min_base_amount_increment=quantity_step)
+                rules[trading_pair_name] = TradingRule(trading_pair=trading_pair_name,
+                                                  min_order_size=trading_pair["tradeMinimumAmount"],
+                                                  max_order_size=trading_pair["tradeMaximumAmount"],
+                                                  min_price_increment=trading_pair["tickSize"],
+                                                  min_base_amount_increment=trading_pair["tickSize"],
+                                                  )
             except Exception:
-                self.logger().error(f"Error parsing the exchange rules for {t_pair}. Skipping.", exc_info=True)
+                self.logger().error(f"Error parsing the exchange rules for {trading_pair_name}. Skipping.",
+                                    exc_info=True)
         return rules
 
     async def _api_request(self,
@@ -516,7 +516,8 @@ class ZebpayExchange(ExchangeBase):
             rest_url = get_zebpay_rest_url()
             url = f"{rest_url}/api/v1/tradepairs/in"
             result = await self._api_request("get", url, {}, False)
-            return result
+            market_info = result["data"]
+            return market_info
 
     async def _create_order(self,
                             trade_type: TradeType,
@@ -538,7 +539,7 @@ class ZebpayExchange(ExchangeBase):
             try:
                 if not order_type.is_limit_type():
                     raise Exception(f"Unsupported order type: {order_type}")
-                trading_rule = self._trading_rules[trading_pair]  # No trading rules applied at this time
+                trading_rule = self._trading_rules[trading_pair]
 
                 amount = self.quantize_order_amount(trading_pair, amount)
                 price = self.quantize_order_price(trading_pair, price)
@@ -546,6 +547,10 @@ class ZebpayExchange(ExchangeBase):
                 if amount < trading_rule.min_order_size:
                     raise ValueError(f"Buy order amount {amount} is lower than the minimum order size "
                                      f"{trading_rule.min_order_size}. client_order_id: {client_order_id}")
+
+                if amount < trading_rule.max_order_size:
+                    raise ValueError(f"Buy order amount {amount} is higher than the maximum order size "
+                                     f"{trading_rule.max_order_size}. client_order_id: {client_order_id}")
 
                 if trade_type.value == 1:
                     trade_side = "bid"
